@@ -1,6 +1,14 @@
 # 🎵 SoundwaveOverlay
 
-*A minimalist media overlay app built with Rust; customizable, snappy, and entirely yours ;)*   (slogan still being worked on)
+![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)
+![Tauri](https://img.shields.io/badge/tauri-v1-blue.svg)
+![Tokio](https://img.shields.io/badge/tokio-1.x-purple.svg)
+    <!-- very cute badges. this message is hidden pls go away -->
+
+
+*A minimalist media overlay app built with Rust; customizable, snappy, and entirely yours ;)*  
+_(slogan still being worked on)_
+
 
 ## Overview
 

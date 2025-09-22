@@ -1,0 +1,26 @@
+{
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": ".",
+    "distDir": "."
+  },
+  "package": {
+    "productName": "SoundwaveOverlay",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {},
+    "windows": [
+      {
+        "title": "SoundwaveOverlay",
+        "width": 600,
+        "height": 80,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "center": true
+      }
+    ]
+  }
+}
