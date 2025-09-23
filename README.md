@@ -4,7 +4,7 @@
 
 ## Overview
 
-**SoundwaveOverlay** (~ working title ~) is a lightweight desktop overlay that displays media information (like the current song, artist, and album art) using system-level integrations — no logins, no trackers, no nonsense. 
+**SoundwaveOverlay** (~ working title ~) is a lightweight desktop overlay that displays media information (like the current song, artist, and album art) using system-level integrations -- no logins, no trackers, no nonsense. 
 
 It's being built in **Rust** with a frontend powered by **Tauri**, making it ultra-performant and cross-platform.
 
