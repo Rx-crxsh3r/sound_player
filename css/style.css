@@ -1,27 +1,50 @@
-body, html {
+:root {
+  font-family: sans-serif;
+}
+
+body {
   margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
+  background-color: transparent;
+  user-select: none;
+}
+
+#app-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.view.hidden {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
 }
 
 #main-bar {
-  width: 400px;
-  height: 50px;
-  background: gray; /* placeholder */
-  border-radius: 25px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  width: 400px;
+  height: 50px;
+  border-radius: 25px;
   padding: 0 20px;
 }
 
 #popup-box {
-  display: none;
+  display: flex;
+  align-items: center;
   width: 300px;
   height: 100px;
-  background: #222;
   border-radius: 12px;
   padding: 10px;
-  color: white;
+  position: fixed;
+  top: 20px;
+  left: 20px;
+}
+
+#album-art {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
 }

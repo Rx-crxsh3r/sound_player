@@ -1,32 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Audio Overlay</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <meta charset="UTF-8">
+  <title>SoundwaveOverlay</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div id="app-container">
-    <div id="main-bar" class="idle">
-      <span class="status-text">Idle</span>
+    <div id="main-bar" class="view idle">
+      <div class="status-text">Idle — No Media</div>
       <div class="active-content hidden">
-        <span id="track-time">0:00 / 0:00</span>
-        <button id="open-popup-btn">⤢</button>
+        <button id="open-popup-btn">⏏</button>
+        <div id="animated-line">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+        <div id="track-time">0:00 / 0:00</div>
       </div>
     </div>
 
-    <div id="popup-box" class="hidden">
+    <div id="popup-box" class="view hidden">
+      <button id="close-popup-btn">✖</button>
       <img id="album-art" src="" alt="Album Art">
       <div class="info-wrapper">
         <div id="track-info">
-          <p id="track-title">Track</p>
+          <p id="track-title">Track Title</p>
           <p id="track-artist">Artist</p>
         </div>
         <div class="progress-bar-container">
           <div id="progress-bar"></div>
         </div>
       </div>
-      <button id="close-popup-btn">✕</button>
     </div>
   </div>
 

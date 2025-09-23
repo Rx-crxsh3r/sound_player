@@ -7,15 +7,30 @@
   },
   "package": {
     "productName": "SoundwaveOverlay",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "tauri": {
-    "allowlist": {},
+    "allowlist": {
+      "window": {
+        "startDragging": true
+      },
+      "shell": {
+        "open": true
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.soundwave.overlay",
+      "icon": [
+        "icons/icon.ico"
+      ]
+    },
     "windows": [
       {
         "title": "SoundwaveOverlay",
-        "width": 600,
-        "height": 80,
+        "width": 800,
+        "height": 100,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
