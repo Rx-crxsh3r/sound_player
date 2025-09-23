@@ -1,42 +1,45 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>SoundwaveOverlay</title>
-  <link rel="stylesheet" href="css/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Audio Overlay</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Template CSS will be loaded here by JavaScript -->
 </head>
 <body>
-  <div id="app-container">
-    <div id="main-bar" class="view idle">
-      <div class="status-text">Idle — No Media</div>
-      <div class="active-content hidden">
-        <button id="open-popup-btn">⏏</button>
-        <div id="animated-line">
-          <div class="bar"></div>
-          <div class="bar"></div>
-          <div class="bar"></div>
-          <div class="bar"></div>
-          <div class="bar"></div>
+
+  <div id="app-container" data-tauri-drag-region>
+
+    <!-- MAIN BAR VIEW -->
+    <div id="main-bar" class="view" data-tauri-drag-region>
+      <div class="status-text idle-text">~ Idle ~</div>
+      <div class="active-content" data-tauri-drag-region>
+        <button id="open-popup-btn">&lt;|</button>
+        <div id="animated-line" data-tauri-drag-region>
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
         </div>
-        <div id="track-time">0:00 / 0:00</div>
+        <div id="track-time" data-tauri-drag-region>--:-- / --:--</div>
       </div>
     </div>
 
+    <!-- POPUP BOX VIEW -->
     <div id="popup-box" class="view hidden">
-      <button id="close-popup-btn">✖</button>
-      <img id="album-art" src="" alt="Album Art">
+      <img id="album-art" src="https://placehold.co/100x100/191414/FFFFFF?text=..."/>
       <div class="info-wrapper">
         <div id="track-info">
           <p id="track-title">Track Title</p>
-          <p id="track-artist">Artist</p>
+          <p id="track-artist">Artist Name</p>
         </div>
         <div class="progress-bar-container">
           <div id="progress-bar"></div>
         </div>
       </div>
+       <button id="close-popup-btn">X</button>
     </div>
+
   </div>
 
-  <script src="js/main.js" type="module"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

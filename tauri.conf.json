@@ -6,34 +6,48 @@
     "distDir": "."
   },
   "package": {
-    "productName": "SoundwaveOverlay",
-    "version": "0.2.0"
+    "productName": "Audio-Overlay",
+    "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
-      "window": {
-        "startDragging": true
-      },
+      "all": false,
       "shell": {
+        "all": false,
         "open": true
+      },
+      "window": {
+        "all": false,
+        "startDragging": true
       }
     },
     "bundle": {
       "active": true,
       "targets": "all",
-      "identifier": "com.soundwave.overlay",
+      "identifier": "com.tauri.audio.overlay",
       "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
         "icons/icon.ico"
       ]
     },
+    "security": {
+      "csp": null
+    },
     "windows": [
       {
-        "title": "SoundwaveOverlay",
+        "fullscreen": false,
+        "resizable": true,
+        "title": "Audio Overlay",
         "width": 800,
         "height": 100,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
+        "visible": true,
+        "skipTaskbar": true,
         "center": true
       }
     ]

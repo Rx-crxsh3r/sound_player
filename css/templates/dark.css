@@ -1,0 +1,61 @@
+/* --- DARK THEME --- */
+/* LIFE HACK ON CREATING NEW SWEET THEME FILES:
+   1. Copy this file. <_>
+   2. Change the CSS variable values below to thy need. ~_~
+   3. Update main.js to load new file.
+   
+   -- this is temporary until I make a proper theme switcher.
+*/
+
+:root {
+  --bg-color: rgba(25, 20, 20, 0.85);
+  --bg-color-solid: rgb(25, 20, 20);
+  --text-color: #e0e0e0;
+  --text-color-muted: #a0a0a0;
+  --accent-color: #1DB954; /* Spotify Green */
+  --shadow-color: rgba(0, 0, 0, 0.5);
+}
+
+body {
+  color: var(--text-color);
+}
+
+#main-bar {
+  background-color: var(--bg-color);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px var(--shadow-color);
+}
+
+#main-bar .status-text {
+    color: var(--text-color-muted);
+}
+
+#open-popup-btn, #close-popup-btn {
+  color: var(--text-color);
+}
+#close-popup-btn:hover, #open-popup-btn:hover {
+  color: var(--accent-color);
+}
+
+#animated-line .bar {
+  background-color: var(--accent-color);
+}
+
+#popup-box {
+  background-color: var(--bg-color);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px var(--shadow-color);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#track-artist {
+  color: var(--text-color-muted);
+}
+
+.progress-bar-container {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+#progress-bar {
+  background-color: var(--accent-color);
+}
