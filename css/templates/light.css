@@ -14,6 +14,23 @@
   --bar-active-opacity:  0.92;
   --bar-idle-opacity:    0.58;
   --popup-bg-opacity:    0.92;
+
+  /* Settings window chrome variables */
+  --settings-bg-start:       rgba(224, 227, 234, 0.98);
+  --settings-bg-end:         rgba(234, 236, 242, 0.97);
+  --ui-nav-bg:               rgba(0, 0, 0, 0.04);
+  --ui-nav-border:           rgba(0, 0, 0, 0.09);
+  --ui-card-border:          rgba(0, 0, 0, 0.09);
+  --ui-card-bg:              rgba(0, 0, 0, 0.03);
+  --ui-input-border:         rgba(0, 0, 0, 0.14);
+  --ui-input-bg:             rgba(0, 0, 0, 0.05);
+  --ui-hover-bg:             rgba(0, 0, 0, 0.05);
+  --ui-accent-surface:       rgba(12, 143, 69, 0.10);
+  --ui-accent-row-border:    rgba(0, 0, 0, 0.10);
+  --ui-accent-row-bg:        rgba(0, 0, 0, 0.03);
+  --ui-actions-border:       rgba(0, 0, 0, 0.09);
+  --ui-btn-ghost-border:     rgba(0, 0, 0, 0.15);
+  --ui-btn-ghost-hover-border: rgba(0, 0, 0, 0.30);
 }
 
 body {
@@ -30,6 +47,11 @@ body {
 
 #main-bar.idle {
   background-color: rgba(var(--bg-color-rgb), var(--bar-idle-opacity));
+}
+
+/* Edit mode: accent-colored outline so the user knows dragging is active */
+body.edit-mode #main-bar {
+  box-shadow: 0 4px 18px var(--shadow-color), 0 0 0 1.5px var(--accent-color);
 }
 
 .idle-text {

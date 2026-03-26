@@ -10,8 +10,10 @@ const DEFAULTS = {
     accentColor:   '#1DB954',
     editMode:      false,
     offsetX:       0,
-    offsetY:       0,    barX:          0,
-    barY:          0,};
+    offsetY:       0,
+    barX:          0,
+    barY:          0,
+};
 
 const BAR_HEIGHT     = 46;   // must match tauri.conf window height
 const POPUP_HEIGHT   = 172;  // bar + popup together

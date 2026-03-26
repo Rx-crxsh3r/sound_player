@@ -83,7 +83,8 @@ function readUI() {
 function liveUpdate() {
     const activeVal = document.getElementById('active-opacity').value;
     const idleVal   = document.getElementById('idle-opacity').value;
-    const hexVal    = document.getElementById('accent-color-picker').value;    console.log(`[UI] liveUpdate — active:${activeVal}% idle:${idleVal}% accent:${hexVal}`);
+    const hexVal    = document.getElementById('accent-color-picker').value;
+    console.log(`[UI] liveUpdate — active:${activeVal}% idle:${idleVal}% accent:${hexVal}`);
     document.getElementById('active-opacity-value').textContent = `${activeVal}%`;
     document.getElementById('idle-opacity-value').textContent   = `${idleVal}%`;
     document.getElementById('accent-hex-label').textContent     = hexVal;

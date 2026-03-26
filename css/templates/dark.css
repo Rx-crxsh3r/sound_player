@@ -15,6 +15,23 @@
   --bar-active-opacity:  0.88;
   --bar-idle-opacity:    0.50;
   --popup-bg-opacity:    0.88;
+
+  /* Settings window chrome variables */
+  --settings-bg-start:       rgba(18, 16, 18, 0.98);
+  --settings-bg-end:         rgba(26, 28, 34, 0.97);
+  --ui-nav-bg:               rgba(0, 0, 0, 0.18);
+  --ui-nav-border:           rgba(255, 255, 255, 0.07);
+  --ui-card-border:          rgba(255, 255, 255, 0.08);
+  --ui-card-bg:              rgba(255, 255, 255, 0.04);
+  --ui-input-border:         rgba(255, 255, 255, 0.12);
+  --ui-input-bg:             rgba(255, 255, 255, 0.07);
+  --ui-hover-bg:             rgba(255, 255, 255, 0.06);
+  --ui-accent-surface:       rgba(29, 185, 84, 0.10);
+  --ui-accent-row-border:    rgba(255, 255, 255, 0.09);
+  --ui-accent-row-bg:        rgba(255, 255, 255, 0.04);
+  --ui-actions-border:       rgba(255, 255, 255, 0.07);
+  --ui-btn-ghost-border:     rgba(255, 255, 255, 0.14);
+  --ui-btn-ghost-hover-border: rgba(255, 255, 255, 0.28);
 }
 
 body {
