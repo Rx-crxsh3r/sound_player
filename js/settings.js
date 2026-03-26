@@ -61,6 +61,8 @@ function populateUI(s) {
     document.getElementById('accent-hex-label').textContent     = `${s.accentColor}`;
 
     applyThemeLink(s.theme);
+    document.documentElement.style.setProperty('--accent-color', s.accentColor);
+    document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
     console.log('[UI] populateUI done');
 }
 
@@ -90,6 +92,8 @@ function liveUpdate() {
     document.getElementById('accent-hex-label').textContent     = hexVal;
 
     applyThemeLink(document.getElementById('theme-select').value);
+    document.documentElement.style.setProperty('--accent-color', hexVal);
+    document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(hexVal, 0.10));
 }
 
 // ── Status helper ──────────────────────────────────────────

@@ -34,5 +34,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Mirror popup open/closed state as V / ∧ button rotation.
+    listen('overlay-popup-changed', (e) => {
+        const btn = document.getElementById('toggle-btn');
+        if (btn) btn.classList.toggle('is-open', Boolean(e.payload?.open));
+    });
+
     console.log('[BOOT] bar_button init complete');
 });

@@ -1,4 +1,4 @@
-const { listen }                              = window.__TAURI__.event;
+const { listen, emit }                        = window.__TAURI__.event;
 const { invoke }                              = window.__TAURI__.tauri;
 const { appWindow, LogicalSize, PhysicalPosition } = window.__TAURI__.window;
 
@@ -115,6 +115,9 @@ async function setPopup(visible) {
     }
     await syncWindowHeight();
     await syncClickThrough();
+    try { await emit('overlay-popup-changed', { open: popupOpen }); } catch (err) {
+        console.warn('[POPUP] emit overlay-popup-changed failed:', err);
+    }
     console.log(`[POPUP] setPopup done — popupOpen: ${popupOpen}`);
 }
 

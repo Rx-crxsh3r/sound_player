@@ -21,17 +21,17 @@ html, body {
   cursor: pointer;
   padding: 0;
 
-  /* Triangle pointing right (play-button shape) */
-  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='18,8 88,50 18,92'/></svg>");
-  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='18,8 88,50 18,92'/></svg>");
-  -webkit-mask-size: 55% 55%;
-  mask-size: 55% 55%;
+  /* Chevron V — rotates 180° to become ∧ when popup is open */
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  -webkit-mask-size: 75% 75%;
+  mask-size: 75% 75%;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
 
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 #toggle-btn:hover {
@@ -40,4 +40,9 @@ html, body {
 
 #toggle-btn:active {
   background: var(--text-color, #e0e0e0);
+}
+
+/* Flip to ∧ when popup is open */
+#toggle-btn.is-open {
+  transform: rotate(180deg);
 }
