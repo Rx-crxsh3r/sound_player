@@ -22,7 +22,7 @@ struct MediaState {
 
 // ── Settings schema ────────────────────────────────────────
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 struct OverlaySettings {
     theme:          String,
     active_opacity: u8,
@@ -31,6 +31,9 @@ struct OverlaySettings {
     edit_mode:      bool,
     offset_x:       u8,
     offset_y:       u8,
+    // Saved bar window position (physical pixels). 0,0 = top-left (default).
+    bar_x:          i32,
+    bar_y:          i32,
 }
 
 impl Default for OverlaySettings {
@@ -43,6 +46,8 @@ impl Default for OverlaySettings {
             edit_mode:      false,
             offset_x:       0,
             offset_y:       0,
+            bar_x:          0,
+            bar_y:          0,
         }
     }
 }
@@ -114,6 +119,19 @@ fn set_main_click_through(handle: AppHandle, pass_through: bool) {
     } else {
         eprintln!("[CMD] set_main_click_through — WARNING: main window not found");
     }
+}
+
+// Position of the main bar window (physical pixels)
+#[derive(serde::Serialize)]
+struct BarPosition { x: i32, y: i32 }
+
+#[tauri::command]
+fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
+    eprintln!("[CMD] get_main_position called");
+    let win = handle.get_window("main").ok_or_else(|| "main window not found".to_string())?;
+    let pos = win.outer_position().map_err(|e| e.to_string())?;
+    eprintln!("[CMD] get_main_position — x:{} y:{}", pos.x, pos.y);
+    Ok(BarPosition { x: pos.x, y: pos.y })
 }
 
 // ── bar_button window helpers ──────────────────────────────
@@ -202,6 +220,7 @@ fn main() {
             save_overlay_settings,
             toggle_overlay_popup,
             set_main_click_through,
+            get_main_position,
         ])
         .system_tray(build_tray())
         .on_system_tray_event(|app, event| match event {
@@ -255,7 +274,10 @@ fn main() {
             eprintln!("[BOOT] Setup starting...");
             let handle = app.handle();
 
-            // Main overlay: resize to full monitor width, then make click-through.
+            // Read saved settings so we can restore bar position
+            let saved = read_settings(&handle);
+
+            // Main overlay: resize to full monitor width, restore saved Y position, then make click-through.
             eprintln!("[BOOT] Configuring main overlay window...");
             if let Some(main) = app.get_window("main") {
                 if let Ok(Some(monitor)) = main.current_monitor() {
@@ -263,11 +285,13 @@ fn main() {
                     let screen_w = monitor.size().width as f64 / scale;
                     eprintln!("[BOOT] Monitor detected — scale: {}, logical width: {}px", scale, screen_w);
                     let _ = main.set_size(tauri::LogicalSize::new(screen_w, 46.0));
-                    let _ = main.set_position(tauri::LogicalPosition::new(0.0, 0.0));
-                    eprintln!("[BOOT] Main window resized to {}x46 and positioned at (0,0)", screen_w);
+                    eprintln!("[BOOT] Main window resized to {}x46", screen_w);
                 } else {
                     eprintln!("[BOOT] WARNING: Could not read current monitor — bar may not be full width");
                 }
+                // Restore saved position (bar_x is normally 0 for full-width; bar_y allows vertical repositioning)
+                eprintln!("[BOOT] Restoring bar position to ({}, {})", saved.bar_x, saved.bar_y);
+                let _ = main.set_position(PhysicalPosition::new(saved.bar_x, saved.bar_y));
                 let _ = main.set_ignore_cursor_events(true);
                 eprintln!("[BOOT] Main window click-through enabled");
             } else {

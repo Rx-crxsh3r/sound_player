@@ -33,6 +33,11 @@ body {
   background-color: rgba(var(--bg-color-rgb), var(--bar-idle-opacity));
 }
 
+/* Edit mode: accent-colored outline so the user knows dragging is active */
+body.edit-mode #main-bar {
+  box-shadow: 0 4px 18px var(--shadow-color), 0 0 0 1.5px var(--accent-color);
+}
+
 .idle-text {
   color: var(--text-color-muted);
 }

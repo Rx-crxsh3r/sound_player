@@ -1,6 +1,6 @@
-const { listen }                 = window.__TAURI__.event;
-const { invoke }                 = window.__TAURI__.tauri;
-const { appWindow, LogicalSize } = window.__TAURI__.window;
+const { listen }                              = window.__TAURI__.event;
+const { invoke }                              = window.__TAURI__.tauri;
+const { appWindow, LogicalSize, PhysicalPosition } = window.__TAURI__.window;
 
 // ── defaults (fallback if backend unreachable) ─────────────
 const DEFAULTS = {
@@ -10,8 +10,8 @@ const DEFAULTS = {
     accentColor:   '#1DB954',
     editMode:      false,
     offsetX:       0,
-    offsetY:       0,
-};
+    offsetY:       0,    barX:          0,
+    barY:          0,};
 
 const BAR_HEIGHT     = 46;   // must match tauri.conf window height
 const POPUP_HEIGHT   = 172;  // bar + popup together
@@ -38,6 +38,19 @@ function setTheme(name) {
 let settings   = { ...DEFAULTS };
 let popupOpen  = false;
 
+// ── click-through sync ────────────────────────────────────
+// Bar must be interactive when popup is visible OR edit mode is on.
+// Otherwise the window is fully click-through (the overlay state).
+async function syncClickThrough() {
+    const passThrough = !popupOpen && !settings.editMode;
+    console.log(`[CLICK-THROUGH] popup:${popupOpen} editMode:${settings.editMode} → passThrough:${passThrough}`);
+    try {
+        await invoke('set_main_click_through', { passThrough });
+    } catch (err) {
+        console.warn('[CLICK-THROUGH] invoke failed:', err);
+    }
+}
+
 // ── window height sync ─────────────────────────────────────
 async function syncWindowHeight() {
     try {
@@ -52,7 +65,7 @@ async function syncWindowHeight() {
 }
 
 // ── apply settings from any source ────────────────────────
-function applySettings(s) {
+async function applySettings(s) {
     console.log('[SETTINGS] applySettings called:', s);
     settings = { ...DEFAULTS, ...s };
 
@@ -66,6 +79,19 @@ function applySettings(s) {
 
     document.body.classList.toggle('edit-mode', Boolean(settings.editMode));
     console.log(`[SETTINGS] Applied — theme:${settings.theme} active-opacity:${settings.activeOpacity} accent:${settings.accentColor} editMode:${settings.editMode}`);
+
+    // Sync click-through: interactive when popup open OR edit mode on
+    await syncClickThrough();
+
+    // Restore saved bar position
+    if (typeof settings.barX === 'number' && typeof settings.barY === 'number') {
+        try {
+            await appWindow.setPosition(new PhysicalPosition(settings.barX, settings.barY));
+            console.log(`[SETTINGS] Bar position applied: (${settings.barX}, ${settings.barY})`);
+        } catch (err) {
+            console.warn('[SETTINGS] Failed to set bar position:', err);
+        }
+    }
 
     const popup = document.getElementById('popup-box');
     if (popup) {
@@ -86,15 +112,7 @@ async function setPopup(visible) {
         console.warn('[POPUP] popup-box element not found in DOM!');
     }
     await syncWindowHeight();
-    // Disable OS-level click-through when popup is open so buttons work.
-    // Re-enable when popup closes so the bar stays fully transparent.
-    try {
-        console.log(`[POPUP] Calling set_main_click_through(passThrough: ${!popupOpen})`);
-        await invoke('set_main_click_through', { passThrough: !popupOpen });
-        console.log(`[POPUP] set_main_click_through OK`);
-    } catch (err) {
-        console.warn('[POPUP] set_main_click_through failed:', err);
-    }
+    await syncClickThrough();
     console.log(`[POPUP] setPopup done — popupOpen: ${popupOpen}`);
 }
 
@@ -138,10 +156,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         const loaded = await invoke('load_overlay_settings');
         console.log('[BOOT] Settings loaded from backend:', loaded);
-        applySettings(loaded);
+        await applySettings(loaded);
     } catch (err) {
         console.warn('[BOOT] load_overlay_settings failed, using defaults:', err);
-        applySettings(DEFAULTS);
+        await applySettings(DEFAULTS);
     }
 
     // Start in bar-only height, idle state
@@ -153,9 +171,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ── event listeners ──────────────────────────────────
     // Settings updated from settings window
-    listen('overlay-settings-updated', (e) => {
+    listen('overlay-settings-updated', async (e) => {
         console.log('[EVENT] overlay-settings-updated received:', e.payload);
-        applySettings(e.payload);
+        await applySettings(e.payload);
     });
     console.log('[BOOT] Listening for overlay-settings-updated');
 

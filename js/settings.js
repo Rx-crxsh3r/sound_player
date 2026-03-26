@@ -9,6 +9,8 @@ const DEFAULTS = {
     editMode:      false,
     offsetX:       0,
     offsetY:       0,
+    barX:          0,
+    barY:          0,
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -134,6 +136,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('[BTN] Save & Apply clicked');
         const newSettings = readUI();
         setStatus('Saving…');
+
+        // Capture current bar position so it persists across restarts
+        try {
+            const pos = await invoke('get_main_position');
+            newSettings.barX = pos.x;
+            newSettings.barY = pos.y;
+            console.log(`[BTN] Bar position captured: (${pos.x}, ${pos.y})`);
+        } catch (err) {
+            console.warn('[BTN] get_main_position failed, keeping existing barX/barY:', err);
+        }
 
         try {
             console.log('[BTN] Invoking save_overlay_settings...');
