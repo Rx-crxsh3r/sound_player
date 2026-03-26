@@ -16,7 +16,7 @@ const DEFAULTS = {
 };
 
 const BAR_HEIGHT     = 46;   // must match tauri.conf window height
-const POPUP_HEIGHT   = 172;  // bar + popup together
+const POPUP_HEIGHT   = 200;  // bar + popup together
 
 // ── helpers ────────────────────────────────────────────────
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }

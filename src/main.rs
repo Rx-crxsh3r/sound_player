@@ -166,7 +166,7 @@ fn sync_button_position(handle: &AppHandle) {
     };
     if let Ok(pos) = main.outer_position() {
         let target_x = pos.x + 10;
-        let target_y = pos.y;
+        let target_y = pos.y - 8; //the button 
         eprintln!("[WINDOW] sync_button_position — main outer pos: ({}, {}), placing bar_button at ({}, {})", pos.x, pos.y, target_x, target_y);
         let _ = btn.set_position(PhysicalPosition::new(target_x, target_y));
     } else {

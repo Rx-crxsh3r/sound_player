@@ -22,8 +22,8 @@ html, body {
   padding: 0;
 
   /* Chevron V — rotates 180° to become ∧ when popup is open */
-  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='14' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polyline points='20,36 50,64 80,36' fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   -webkit-mask-size: 75% 75%;
   mask-size: 75% 75%;
   -webkit-mask-repeat: no-repeat;

@@ -46,7 +46,7 @@ html, body {
   display: flex;
   align-items: flex-start;
   padding: 0 18px;
-  padding-top: 6px;
+  padding-top: 2px;
 
   /* Non-interactive — bar_button window handles the toggle click */
   pointer-events: none;
@@ -106,7 +106,7 @@ html, body {
   margin-left: auto;
   font-size: 0.80rem;
   white-space: nowrap;
-  line-height: 22px;      /* align with flat bar height */
+  line-height: 18px;      /* keep text within the 22px flat clip-path region */
 }
 
 /* ── Popup box ──────────────────────────────────────────── */
@@ -166,7 +166,7 @@ html, body {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  margin-top: 10px;
+  margin-top: 14px;
   overflow: hidden;
 }
 
@@ -181,25 +181,33 @@ html, body {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .transport-btn {
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  font-size: 0.68rem;
-  min-width: 38px;
-  height: 22px;
+  font-size: 0.80rem;
+  min-width: 46px;
+  height: 38px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transport-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 #close-popup-btn {
   position: absolute;
-  top: 6px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   background: none;
   border: none;
   font-size: 0.80rem;
