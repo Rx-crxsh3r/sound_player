@@ -255,6 +255,13 @@ fn main() {
                     eprintln!("[WINDOW] main moved to ({}, {}) — syncing bar_button position", pos.x, pos.y);
                     sync_button_position(&event.window().app_handle());
                 }
+                // Re-assert bar_button z-order above the main bar after every resize
+                // (popup open/close resizes main, which can push bar_button behind it).
+                WindowEvent::Resized(_) if label == "main" => {
+                    if let Some(btn) = event.window().app_handle().get_window("bar_button") {
+                        let _ = btn.set_always_on_top(true);
+                    }
+                }
                 // Closing any window hides it rather than quitting (tray app).
                 WindowEvent::CloseRequested { api, .. } => {
                     eprintln!("[WINDOW] Close requested for '{}' — hiding instead of closing", label);
