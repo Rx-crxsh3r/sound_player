@@ -1,0 +1,43 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+}
+
+/*
+  The button fills the entire tiny window.
+  The triangle shape is rendered via mask-image so the
+  background shows through only the triangle area —
+  the rest of the window stays transparent/click-through.
+*/
+#toggle-btn {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--text-color-muted, #a0a0a0);
+  cursor: pointer;
+  padding: 0;
+
+  /* Triangle pointing right (play-button shape) */
+  -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='18,8 88,50 18,92'/></svg>");
+  mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='18,8 88,50 18,92'/></svg>");
+  -webkit-mask-size: 55% 55%;
+  mask-size: 55% 55%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+
+  transition: background 0.15s ease;
+}
+
+#toggle-btn:hover {
+  background: var(--accent-color, #1DB954);
+}
+
+#toggle-btn:active {
+  background: var(--text-color, #e0e0e0);
+}

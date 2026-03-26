@@ -3,7 +3,8 @@
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
     "devPath": ".",
-    "distDir": "."
+    "distDir": ".",
+    "withGlobalTauri": true
   },
   "package": {
     "productName": "Audio-Overlay",
@@ -17,8 +18,10 @@
         "open": true
       },
       "window": {
-        "all": false,
-        "startDragging": true
+        "all": true
+      },
+      "app": {
+        "all": true
       }
     },
     "bundle": {
@@ -34,21 +37,27 @@
       ]
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:"
+    },
+    "systemTray": {
+      "iconPath": "icons/icon.ico",
+      "iconAsTemplate": false
     },
     "windows": [
       {
+        "label": "main",
         "fullscreen": false,
         "resizable": true,
         "title": "Audio Overlay",
         "width": 800,
-        "height": 100,
+        "height": 46,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "visible": true,
         "skipTaskbar": true,
-        "center": true
+        "x": 0,
+        "y": 0
       }
     ]
   }

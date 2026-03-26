@@ -5,27 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Audio Overlay</title>
   <link rel="stylesheet" href="css/style.css" />
-  <!-- Template CSS will be loaded here by JavaScript -->
+  <link id="theme-template" rel="stylesheet" href="css/templates/dark.css" />
 </head>
 <body>
 
-  <div id="app-container" data-tauri-drag-region>
+  <div id="app-container">
 
-    <!-- MAIN BAR VIEW -->
-    <div id="main-bar" class="view" data-tauri-drag-region>
-      <div class="status-text idle-text">~ Idle ~</div>
-      <div class="active-content" data-tauri-drag-region>
-        <button id="open-popup-btn">&lt;|</button>
-        <div id="animated-line" data-tauri-drag-region>
-            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+    <!-- MAIN BAR: full-width, touches top edge, tapered geometry -->
+    <div id="main-bar">
+      <!-- Left slot: visualizer / idle text -->
+      <div id="bar-left">
+        <div id="animated-line" aria-hidden="true">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
         </div>
-        <div id="track-time" data-tauri-drag-region>--:-- / --:--</div>
+        <div class="idle-text">~ Idle ~</div>
       </div>
+
+      <!-- Right slot: track time -->
+      <div id="track-time">--:-- / --:--</div>
     </div>
 
-    <!-- POPUP BOX VIEW -->
-    <div id="popup-box" class="view hidden">
-      <img id="album-art" src="https://placehold.co/100x100/191414/FFFFFF?text=..."/>
+    <!-- POPUP BOX: shown below-left of bar on toggle -->
+    <div id="popup-box" class="hidden">
+      <img id="album-art" src="" alt="Album art" />
       <div class="info-wrapper">
         <div id="track-info">
           <p id="track-title">Track Title</p>
@@ -34,12 +43,17 @@
         <div class="progress-bar-container">
           <div id="progress-bar"></div>
         </div>
+        <div id="transport-controls">
+          <button class="transport-btn" id="prev-btn" type="button" title="Previous (coming soon)">&#9664;&#9664;</button>
+          <button class="transport-btn" id="play-pause-btn" type="button" title="Play/Pause (coming soon)">&#9646;&#9646;</button>
+          <button class="transport-btn" id="next-btn" type="button" title="Next (coming soon)">&#9654;&#9654;</button>
+        </div>
       </div>
-       <button id="close-popup-btn">X</button>
+      <button id="close-popup-btn" type="button" aria-label="Close">&#x2715;</button>
     </div>
 
   </div>
 
-  <script type="module" src="js/main.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>

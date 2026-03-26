@@ -1,20 +1,19 @@
 /* =========================================================
-   DARK THEME
-   To create a new theme: copy this file, change the :root
-   values only, and add it to the theme selector in settings.
+   LIGHT THEME (Placeholder)
+   Values tuned for a light background. Not fully polished yet.
    ========================================================= */
 
 :root {
-  --bg-color-rgb:        25, 20, 20;
-  --bg-color:            rgba(var(--bg-color-rgb), 0.88);
+  --bg-color-rgb:        235, 238, 242;
+  --bg-color:            rgba(var(--bg-color-rgb), 0.92);
   --bg-color-solid:      rgb(var(--bg-color-rgb));
-  --text-color:          #e0e0e0;
-  --text-color-muted:    #a0a0a0;
-  --accent-color:        #1DB954;
-  --shadow-color:        rgba(0, 0, 0, 0.55);
-  --bar-active-opacity:  0.88;
-  --bar-idle-opacity:    0.50;
-  --popup-bg-opacity:    0.88;
+  --text-color:          #1c2028;
+  --text-color-muted:    #606878;
+  --accent-color:        #0c8f45;
+  --shadow-color:        rgba(40, 55, 70, 0.22);
+  --bar-active-opacity:  0.92;
+  --bar-idle-opacity:    0.58;
+  --popup-bg-opacity:    0.92;
 }
 
 body {
@@ -51,7 +50,7 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 6px 24px var(--shadow-color);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(0, 0, 0, 0.10);
 }
 
 #track-title {
@@ -63,7 +62,7 @@ body {
 }
 
 .progress-bar-container {
-  background-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(0, 0, 0, 0.14);
 }
 
 #progress-bar {
@@ -72,7 +71,7 @@ body {
 
 .transport-btn {
   color: var(--text-color-muted);
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(0, 0, 0, 0.18);
 }
 
 .transport-btn:hover {
@@ -87,4 +86,3 @@ body {
 #close-popup-btn:hover {
   color: var(--text-color);
 }
-

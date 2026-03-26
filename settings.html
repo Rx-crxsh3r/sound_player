@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sound Overlay Settings</title>
+  <link id="theme-template" rel="stylesheet" href="css/templates/dark.css" />
+  <link rel="stylesheet" href="css/settings.css" />
+</head>
+<body>
+  <div id="settings-app">
+
+    <!-- Left navigation -->
+    <aside id="settings-nav">
+      <div id="app-brand">Sound Overlay</div>
+      <button class="nav-tab active" data-tab="appearance"  type="button">Appearance</button>
+      <button class="nav-tab"        data-tab="position"    type="button">Position &amp; Edit</button>
+      <button class="nav-tab placeholder" data-tab="media"  type="button">Media Source</button>
+    </aside>
+
+    <!-- Main content -->
+    <main id="settings-main">
+
+      <!-- ── Appearance ──────────────────────────────── -->
+      <section id="view-appearance" class="settings-tab-view active">
+        <h1>Appearance Settings</h1>
+
+        <div class="settings-card">
+          <div class="control-group">
+            <label for="theme-select">Selected Theme</label>
+            <select id="theme-select" class="control-select">
+              <option value="dark">Dark (Default)</option>
+              <option value="light">Light (Placeholder)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label for="active-opacity">Bar Background Opacity (Active)</label>
+            <div class="range-row">
+              <input type="range" id="active-opacity" class="control-range" min="10" max="100" value="85" />
+              <span class="range-value" id="active-opacity-value">85%</span>
+            </div>
+          </div>
+
+          <div class="control-group no-gap">
+            <label for="idle-opacity">Bar Background Opacity (Idle)</label>
+            <div class="range-row">
+              <input type="range" id="idle-opacity" class="control-range" min="10" max="100" value="50" />
+              <span class="range-value" id="idle-opacity-value">50%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <h2>Color Customization</h2>
+            <div class="accent-row">
+              <input type="color" id="accent-color-picker" value="#1DB954" />
+              <div>
+                <p class="accent-name">Main Accent Color</p>
+                <p class="accent-hex" id="accent-hex-label">Spotify Green (#1DB954)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Position & Edit ─────────────────────────── -->
+      <section id="view-position" class="settings-tab-view">
+        <h1>Position &amp; Edit</h1>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <div class="switch-row">
+              <label for="edit-mode-toggle">Enable Edit Mode (Drag to Position)</label>
+              <input type="checkbox" id="edit-mode-toggle" class="toggle-checkbox" />
+            </div>
+            <p class="helper-text">When enabled, the bar can be dragged to any screen position. Save &amp; Apply to persist.</p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <h2>Popup Offset</h2>
+            <p class="helper-text">Adjusts where the popup appears relative to the bar.</p>
+            <div class="double-range">
+              <div>
+                <label for="offset-x">Horizontal Offset</label>
+                <input type="range" id="offset-x" class="control-range" min="0" max="80" value="0" />
+              </div>
+              <div>
+                <label for="offset-y">Vertical Offset</label>
+                <input type="range" id="offset-y" class="control-range" min="0" max="80" value="0" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Media Source (placeholder) ─────────────── -->
+      <section id="view-media" class="settings-tab-view">
+        <h1>Media Source</h1>
+        <div class="settings-card">
+          <p class="helper-text">Media source selection will be enabled after Windows media backend integration. This section is a placeholder.</p>
+        </div>
+      </section>
+
+      <!-- ── Actions row (always visible) ──────────── -->
+      <div class="actions-row">
+        <span id="save-status" aria-live="polite"></span>
+        <button id="reset-btn"  class="btn-ghost" type="button">Reset Defaults</button>
+        <button id="save-btn"   class="btn-primary" type="button">Save &amp; Apply</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/settings.js"></script>
+</body>
+</html>
