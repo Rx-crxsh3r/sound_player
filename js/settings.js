@@ -15,6 +15,13 @@ const DEFAULTS = {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+function hexToRgba(hex, alpha) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 // ── Theme link helper ──────────────────────────────────────
 function applyThemeLink(name) {
     const link = document.getElementById('theme-template');
