@@ -15,8 +15,8 @@ const DEFAULTS = {
     barY:          0,
 };
 
-const BAR_HEIGHT     = 46;   // must match tauri.conf window height
-const POPUP_HEIGHT   = 200;  // bar + popup together
+const BAR_HEIGHT     = 54;   // must match tauri.conf window height
+const POPUP_HEIGHT   = 208;  // bar + popup together
 
 // ── helpers ────────────────────────────────────────────────
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -104,7 +104,7 @@ async function applySettings(s) {
     const popup = document.getElementById('popup-box');
     if (popup) {
         popup.style.left = `${14 + clamp(settings.offsetX, 0, 80)}px`;
-        popup.style.top  = `${50 + clamp(settings.offsetY, 0, 80)}px`;
+        popup.style.top  = `${58 + clamp(settings.offsetY, 0, 80)}px`;
     }
 }
 
@@ -221,4 +221,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     listen('media-update', (e) => { updateMedia(e.payload); });
+
+    // ── Audio frequency visualizer ──────────────────────────
+    // Cache bar elements once — avoids querySelector on every 33 ms tick.
+    const freqLine = document.getElementById('animated-line');
+    const freqBars = freqLine
+        ? [...freqLine.querySelectorAll('.bar')]
+        : [];
+    let freqFallbackTimer = null;
+
+    listen('audio-freq', (e) => {
+        if (!freqLine || freqBars.length === 0) return;
+        const bands = e.payload; // [f32; 8]
+
+        freqLine.classList.add('live');
+        bands.forEach((v, i) => {
+            if (freqBars[i]) {
+                // Min scale keeps bars visible even at very low signal.
+                freqBars[i].style.transform = `scaleY(${Math.max(0.08, v)})`;
+            }
+        });
+
+        // If no new data arrives for 1.5 s, fall back to the CSS animation.
+        clearTimeout(freqFallbackTimer);
+        freqFallbackTimer = setTimeout(() => {
+            freqLine.classList.remove('live');
+            freqBars.forEach(b => { b.style.transform = ''; });
+        }, 1500);
+    });
 });

@@ -50,7 +50,7 @@
         "resizable": true,
         "title": "Audio Overlay",
         "width": 800,
-        "height": 46,
+        "height": 54,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
