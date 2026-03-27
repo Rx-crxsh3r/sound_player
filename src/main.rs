@@ -80,63 +80,39 @@ fn settings_path(handle: &AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 fn read_settings(handle: &AppHandle) -> OverlaySettings {
-    eprintln!("[SETTINGS] Reading settings from disk...");
-    let Ok(path) = settings_path(handle) else {
-        eprintln!("[SETTINGS] Could not resolve settings path — returning defaults");
-        return OverlaySettings::default();
-    };
-    let Ok(raw) = fs::read_to_string(&path) else {
-        eprintln!("[SETTINGS] No settings file found at {:?} — returning defaults", path);
-        return OverlaySettings::default();
-    };
-    let result = serde_json::from_str(&raw).unwrap_or_default();
-    eprintln!("[SETTINGS] Loaded settings OK");
-    result
+    let Ok(path) = settings_path(handle)     else { return OverlaySettings::default(); };
+    let Ok(raw)  = fs::read_to_string(&path) else { return OverlaySettings::default(); };
+    serde_json::from_str(&raw).unwrap_or_default()
 }
 
 fn write_settings(handle: &AppHandle, s: &OverlaySettings) -> Result<(), String> {
-    eprintln!("[SETTINGS] Writing settings to disk...");
     let path    = settings_path(handle)?;
     let content = serde_json::to_string_pretty(s).map_err(|e| e.to_string())?;
-    fs::write(&path, content).map_err(|e| e.to_string())?;
-    eprintln!("[SETTINGS] Settings written OK to {:?}", path);
-    Ok(())
+    fs::write(&path, content).map_err(|e| e.to_string())
 }
 
 // ── Tauri commands ─────────────────────────────────────────
 #[tauri::command]
 fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
-    eprintln!("[CMD] load_overlay_settings called");
-    let s = read_settings(&handle);
-    eprintln!("[CMD] load_overlay_settings done — theme: {}, accent: {}", s.theme, s.accent_color);
-    s
+    read_settings(&handle)
 }
 
 #[tauri::command]
 fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result<(), String> {
-    eprintln!("[CMD] save_overlay_settings called — theme: {}, accent: {}", settings.theme, settings.accent_color);
     write_settings(&handle, &settings)?;
-    eprintln!("[CMD] save_overlay_settings — broadcasting overlay-settings-updated to all windows");
     let _ = handle.emit_all("overlay-settings-updated", &settings);
-    eprintln!("[CMD] save_overlay_settings done");
     Ok(())
 }
 
 #[tauri::command]
 fn toggle_overlay_popup(handle: AppHandle) {
-    eprintln!("[CMD] toggle_overlay_popup called — broadcasting overlay-toggle-popup");
     let _ = handle.emit_all("overlay-toggle-popup", ());
-    eprintln!("[CMD] toggle_overlay_popup broadcast sent");
 }
 
 #[tauri::command]
 fn set_main_click_through(handle: AppHandle, pass_through: bool) {
-    eprintln!("[CMD] set_main_click_through called — pass_through: {}", pass_through);
     if let Some(win) = handle.get_window("main") {
-        let result = win.set_ignore_cursor_events(pass_through);
-        eprintln!("[CMD] set_ignore_cursor_events({}) => {:?}", pass_through, result);
-    } else {
-        eprintln!("[CMD] set_main_click_through — WARNING: main window not found");
+        let _ = win.set_ignore_cursor_events(pass_through);
     }
 }
 
@@ -146,38 +122,27 @@ struct BarPosition { x: i32, y: i32 }
 
 #[tauri::command]
 fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
-    eprintln!("[CMD] get_main_position called");
     let win = handle.get_window("main").ok_or_else(|| "main window not found".to_string())?;
     let pos = win.outer_position().map_err(|e| e.to_string())?;
-    eprintln!("[CMD] get_main_position — x:{} y:{}", pos.x, pos.y);
     Ok(BarPosition { x: pos.x, y: pos.y })
 }
 
 // ── Transport commands ─────────────────────────────────────
 #[tauri::command]
 fn media_play_pause() -> Result<(), String> {
-    eprintln!("[CMD] media_play_pause");
-    get_smtc_session()?
-        .TryTogglePlayPauseAsync().map_err(|e| e.to_string())?
-        .get().map_err(|e| e.to_string())?;
+    get_smtc_session()?.TryTogglePlayPauseAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 fn media_next() -> Result<(), String> {
-    eprintln!("[CMD] media_next");
-    get_smtc_session()?
-        .TrySkipNextAsync().map_err(|e| e.to_string())?
-        .get().map_err(|e| e.to_string())?;
+    get_smtc_session()?.TrySkipNextAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
 fn media_prev() -> Result<(), String> {
-    eprintln!("[CMD] media_prev");
-    get_smtc_session()?
-        .TrySkipPreviousAsync().map_err(|e| e.to_string())?
-        .get().map_err(|e| e.to_string())?;
+    get_smtc_session()?.TrySkipPreviousAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -187,12 +152,8 @@ fn media_prev() -> Result<(), String> {
 // It stays click-through on the OS level is NOT needed here because
 // the window itself is just 30×30 px — only the button is in it.
 fn open_bar_button_window(handle: &AppHandle) {
-    if handle.get_window("bar_button").is_some() {
-        eprintln!("[WINDOW] bar_button already exists — skipping open");
-        return;
-    }
-    eprintln!("[WINDOW] Opening bar_button window (30x22 transparent, always-on-top)...");
-    let result = WindowBuilder::new(handle, "bar_button", WindowUrl::App("bar_button.html".into()))
+    if handle.get_window("bar_button").is_some() { return; }
+    let _ = WindowBuilder::new(handle, "bar_button", WindowUrl::App("bar_button.html".into()))
         .title("Overlay Toggle")
         .inner_size(30.0, 22.0)
         .resizable(false)
@@ -203,34 +164,24 @@ fn open_bar_button_window(handle: &AppHandle) {
         .focused(false)
         .visible(true)
         .build();
-    eprintln!("[WINDOW] bar_button build result: {}", if result.is_ok() { "OK" } else { "FAILED" });
 }
 
 fn sync_button_position(handle: &AppHandle) {
     let (Some(main), Some(btn)) = (handle.get_window("main"), handle.get_window("bar_button")) else {
-        eprintln!("[WINDOW] sync_button_position — could not get main or bar_button window");
         return;
     };
     if let Ok(pos) = main.outer_position() {
-        let target_x = pos.x + 10;
-        let target_y = pos.y - 8; //the button 
-        eprintln!("[WINDOW] sync_button_position — main outer pos: ({}, {}), placing bar_button at ({}, {})", pos.x, pos.y, target_x, target_y);
-        let _ = btn.set_position(PhysicalPosition::new(target_x, target_y));
-    } else {
-        eprintln!("[WINDOW] sync_button_position — failed to read main outer_position");
+        let _ = btn.set_position(PhysicalPosition::new(pos.x + 10, pos.y - 8));
     }
 }
 
 // ── Settings window ────────────────────────────────────────
 fn open_settings_window(handle: &AppHandle) {
-    eprintln!("[WINDOW] open_settings_window called");
     if let Some(win) = handle.get_window("settings") {
-        eprintln!("[WINDOW] Settings window already exists — showing and focusing");
         let _ = win.show();
         let _ = win.set_focus();
         return;
     }
-    eprintln!("[WINDOW] Creating new settings window (860x580)...");
     if let Ok(win) = WindowBuilder::new(handle, "settings", WindowUrl::App("settings.html".into()))
         .title("Sound Overlay Settings")
         .inner_size(860.0, 580.0)
@@ -240,10 +191,7 @@ fn open_settings_window(handle: &AppHandle) {
         .visible(true)
         .build()
     {
-        eprintln!("[WINDOW] Settings window created OK");
         let _ = win.set_focus();
-    } else {
-        eprintln!("[WINDOW] Settings window creation FAILED");
     }
 }
 
@@ -275,50 +223,39 @@ fn main() {
         .system_tray(build_tray())
         .on_system_tray_event(|app, event| match event {
             SystemTrayEvent::LeftClick { .. } => {
-                eprintln!("[TRAY] Left-click on tray icon — opening settings");
                 open_settings_window(app);
             }
             SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
                 "settings" => {
-                    eprintln!("[TRAY] Menu: Settings clicked");
                     open_settings_window(app);
                 }
                 "show_overlay" => {
-                    eprintln!("[TRAY] Menu: Show Overlay clicked");
-                    if let Some(w) = app.get_window("main") { let _ = w.show(); }
+                    if let Some(w) = app.get_window("main")       { let _ = w.show(); }
                     if let Some(w) = app.get_window("bar_button") { let _ = w.show(); }
                     sync_button_position(app);
                 }
                 "quit" => {
-                    eprintln!("[TRAY] Menu: Quit clicked — exiting");
                     std::process::exit(0);
                 }
-                other => eprintln!("[TRAY] Unknown menu item: {}", other),
+                _ => {}
             },
             _ => {}
         })
         .on_window_event(|event| {
             let label = event.window().label();
             match event.event() {
-                // Keep bar_button in sync when main bar moves.
-                WindowEvent::Moved(pos) if label == "main" => {
-                    eprintln!("[WINDOW] main moved to ({}, {}) — syncing bar_button position", pos.x, pos.y);
+                WindowEvent::Moved(_) if label == "main" => {
                     sync_button_position(&event.window().app_handle());
                 }
-                // Re-assert bar_button z-order above the main bar after every resize
-                // (popup open/close resizes main, which can push bar_button behind it).
                 WindowEvent::Resized(_) if label == "main" => {
                     if let Some(btn) = event.window().app_handle().get_window("bar_button") {
                         let _ = btn.set_always_on_top(true);
                     }
                 }
-                // Closing any window hides it rather than quitting (tray app).
                 WindowEvent::CloseRequested { api, .. } => {
-                    eprintln!("[WINDOW] Close requested for '{}' — hiding instead of closing", label);
                     api.prevent_close();
                     let _ = event.window().hide();
                     if label == "main" {
-                        eprintln!("[WINDOW] main hidden — hiding bar_button too");
                         if let Some(btn) = event.window().app_handle().get_window("bar_button") {
                             let _ = btn.hide();
                         }
@@ -328,44 +265,23 @@ fn main() {
             }
         })
         .setup(|app| {
-            eprintln!("[BOOT] Setup starting...");
             let handle = app.handle();
+            let saved  = read_settings(&handle);
 
-            // Read saved settings so we can restore bar position
-            let saved = read_settings(&handle);
-
-            // Main overlay: resize to full monitor width, restore saved Y position, then make click-through.
-            eprintln!("[BOOT] Configuring main overlay window...");
             if let Some(main) = app.get_window("main") {
                 if let Ok(Some(monitor)) = main.current_monitor() {
-                    let scale = monitor.scale_factor();
-                    let screen_w = monitor.size().width as f64 / scale;
-                    eprintln!("[BOOT] Monitor detected — scale: {}, logical width: {}px", scale, screen_w);
+                    let screen_w = monitor.size().width as f64 / monitor.scale_factor();
                     let _ = main.set_size(tauri::LogicalSize::new(screen_w, 46.0));
-                    eprintln!("[BOOT] Main window resized to {}x46", screen_w);
-                } else {
-                    eprintln!("[BOOT] WARNING: Could not read current monitor — bar may not be full width");
                 }
-                // Restore saved position (bar_x is normally 0 for full-width; bar_y allows vertical repositioning)
-                eprintln!("[BOOT] Restoring bar position to ({}, {})", saved.bar_x, saved.bar_y);
                 let _ = main.set_position(PhysicalPosition::new(saved.bar_x, saved.bar_y));
                 let _ = main.set_ignore_cursor_events(true);
-                eprintln!("[BOOT] Main window click-through enabled");
-            } else {
-                eprintln!("[BOOT] WARNING: main window not found in setup");
             }
 
-            // Spawn the button sibling window.
-            eprintln!("[BOOT] Opening bar_button window...");
             open_bar_button_window(&handle);
             sync_button_position(&handle);
-            eprintln!("[BOOT] bar_button opened and positioned");
 
-            // Start SMTC media watcher.
-            eprintln!("[BOOT] Starting SMTC media watcher...");
             let h = handle.clone();
             tauri::async_runtime::spawn(async move { smtc_loop(h).await; });
-            eprintln!("[BOOT] Setup complete — app is running");
 
             Ok(())
         })
@@ -374,37 +290,33 @@ fn main() {
 }
 
 // ── SMTC media watcher ────────────────────────────────────
-// Polls the Windows SMTC API every second.  When the active
-// session or its properties change we emit a media-update event
-// to the frontend.  This replaces the old mock loop entirely.
 async fn smtc_loop(handle: AppHandle) {
-    eprintln!("[MEDIA] SMTC watcher started");
-
-    // Give Windows a moment to finish initialising COM on the async thread.
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let mut last_title  = String::new();
     let mut last_status = String::new();
+    let mut cached_art  = String::new();
 
     loop {
-        match poll_smtc() {
-            Ok(state) => {
-                // Only emit when something actually changed — avoids spamming
-                // the frontend on every tick.
+        match poll_smtc(&last_title) {
+            Ok(mut state) => {
+                if state.title == last_title {
+                    // Same track — reuse cached art (avoids re-reading the thumbnail stream).
+                    state.album_art_url = cached_art.clone();
+                } else {
+                    cached_art = state.album_art_url.clone();
+                }
                 if state.title != last_title || state.status != last_status {
-                    eprintln!("[MEDIA] State changed — status:'{}' title:'{}'",
-                        state.status, state.title);
                     last_title  = state.title.clone();
                     last_status = state.status.clone();
                     let _ = handle.emit_all("media-update", &state);
                 }
             }
-            Err(e) => {
-                eprintln!("[MEDIA] poll_smtc error: {}", e);
-                // Emit idle so the bar doesn't stay stuck on old track info.
+            Err(_) => {
                 if last_status != "idle" {
                     last_status = "idle".into();
                     last_title  = String::new();
+                    cached_art  = String::new();
                     let _ = handle.emit_all("media-update", &MediaState {
                         status:        "idle".into(),
                         title:         String::new(),
@@ -420,57 +332,37 @@ async fn smtc_loop(handle: AppHandle) {
     }
 }
 
-fn poll_smtc() -> Result<MediaState, String> {
-    // Acquire the session manager synchronously (it's a thin COM call).
-    let manager = SmtcManager::RequestAsync()
-        .map_err(|e| e.to_string())?
-        .get()
-        .map_err(|e| e.to_string())?;
+fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
+    let session = get_smtc_session()?;
 
-    let session = manager
-        .GetCurrentSession()
-        .map_err(|_| "no active SMTC session".to_string())?;
-
-    // ── Playback state ──
-    let playback = session
-        .GetPlaybackInfo()
-        .map_err(|e| e.to_string())?;
-
-    let status_enum = playback
-        .PlaybackStatus()
-        .map_err(|e| e.to_string())?;
-
+    let playback    = session.GetPlaybackInfo().map_err(|e| e.to_string())?;
+    let status_enum = playback.PlaybackStatus().map_err(|e| e.to_string())?;
     let status = match status_enum {
         PlaybackStatus::Playing => "playing",
         PlaybackStatus::Paused  => "paused",
         _                        => "idle",
     }.to_string();
 
-    // ── Media properties ──
-    let props = session
-        .TryGetMediaPropertiesAsync()
-        .map_err(|e| e.to_string())?
-        .get()
-        .map_err(|e| e.to_string())?;
-
+    let props  = session.TryGetMediaPropertiesAsync()
+        .map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
     let title  = props.Title() .unwrap_or_default().to_string();
     let artist = props.Artist().unwrap_or_default().to_string();
 
-    // ── Timeline ──
     let (current_time, total_time) = session
         .GetTimelineProperties()
         .map(|tl| {
-            let pos      = tl.Position().unwrap_or_default();
-            let end      = tl.EndTime().unwrap_or_default();
-            // Duration is in 100-nanosecond ticks.
-            let current  = (pos.Duration  / 10_000_000) as u32;
-            let total    = (end.Duration  / 10_000_000) as u32;
-            (current, total)
+            let pos = tl.Position().unwrap_or_default();
+            let end = tl.EndTime().unwrap_or_default();
+            ((pos.Duration / 10_000_000) as u32, (end.Duration / 10_000_000) as u32)
         })
         .unwrap_or((0, 0));
 
-    // ── Album art (optional — fall back to empty string on any error) ──
-    let album_art_url = read_album_art(&props).unwrap_or_default();
+    // Only decode the thumbnail stream when the track changes (avoids ~100-300 KB/s of allocations).
+    let album_art_url = if title != last_title {
+        read_album_art(&props).unwrap_or_default()
+    } else {
+        String::new() // caller restores the cached value
+    };
 
     Ok(MediaState { status, title, artist, album_art_url, current_time, total_time })
 }

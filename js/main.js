@@ -29,11 +29,7 @@ function formatTime(seconds) {
 
 function setTheme(name) {
     const link = document.getElementById('theme-template');
-    if (link) {
-        const file = `css/templates/${name === 'light' ? 'light' : 'dark'}.css`;
-        console.log(`[THEME] Applying theme: "${name}" -> ${file}`);
-        link.href = file;
-    }
+    if (link) link.href = `css/templates/${name === 'light' ? 'light' : 'dark'}.css`;
 }
 
 // ── state ──────────────────────────────────────────────────
@@ -48,11 +44,11 @@ function stopTicker() {
 }
 function startTicker() {
     stopTicker();
+    const timeEl     = document.getElementById('track-time');
+    const progressEl = document.getElementById('progress-bar');
     tickerInterval = setInterval(() => {
         if (mediaState.status !== 'playing') return;
         mediaState.currentTime = Math.min(mediaState.currentTime + 1, mediaState.totalTime);
-        const timeEl     = document.getElementById('track-time');
-        const progressEl = document.getElementById('progress-bar');
         if (timeEl)     timeEl.textContent     = `${formatTime(mediaState.currentTime)} / ${formatTime(mediaState.totalTime)}`;
         if (progressEl) progressEl.style.width = mediaState.totalTime > 0
             ? `${clamp((mediaState.currentTime / mediaState.totalTime) * 100, 0, 100)}%` : '0%';
@@ -64,7 +60,6 @@ function startTicker() {
 // Otherwise the window is fully click-through (the overlay state).
 async function syncClickThrough() {
     const passThrough = !popupOpen && !settings.editMode;
-    console.log(`[CLICK-THROUGH] popup:${popupOpen} editMode:${settings.editMode} → passThrough:${passThrough}`);
     try {
         await invoke('set_main_click_through', { passThrough });
     } catch (err) {
@@ -75,11 +70,9 @@ async function syncClickThrough() {
 // ── window height sync ─────────────────────────────────────
 async function syncWindowHeight() {
     try {
-        const w = (await appWindow.innerSize()).width / (await appWindow.scaleFactor());
+        const w       = (await appWindow.innerSize()).width / (await appWindow.scaleFactor());
         const targetH = popupOpen ? POPUP_HEIGHT : BAR_HEIGHT;
-        console.log(`[WINDOW] syncWindowHeight — popup: ${popupOpen}, setting size to ${w}x${targetH}`);
         await appWindow.setSize(new LogicalSize(w, targetH));
-        console.log(`[WINDOW] Window resized OK`);
     } catch (err) {
         console.warn('[WINDOW] syncWindowHeight failed:', err);
     }
@@ -87,7 +80,6 @@ async function syncWindowHeight() {
 
 // ── apply settings from any source ────────────────────────
 async function applySettings(s) {
-    console.log('[SETTINGS] applySettings called:', s);
     settings = { ...DEFAULTS, ...s };
 
     setTheme(settings.theme);
@@ -99,16 +91,11 @@ async function applySettings(s) {
     root.style.setProperty('--accent-color', settings.accentColor || DEFAULTS.accentColor);
 
     document.body.classList.toggle('edit-mode', Boolean(settings.editMode));
-    console.log(`[SETTINGS] Applied — theme:${settings.theme} active-opacity:${settings.activeOpacity} accent:${settings.accentColor} editMode:${settings.editMode}`);
-
-    // Sync click-through: interactive when popup open OR edit mode on
     await syncClickThrough();
 
-    // Restore saved bar position
     if (typeof settings.barX === 'number' && typeof settings.barY === 'number') {
         try {
             await appWindow.setPosition(new PhysicalPosition(settings.barX, settings.barY));
-            console.log(`[SETTINGS] Bar position applied: (${settings.barX}, ${settings.barY})`);
         } catch (err) {
             console.warn('[SETTINGS] Failed to set bar position:', err);
         }
@@ -123,21 +110,14 @@ async function applySettings(s) {
 
 // ── popup visibility ───────────────────────────────────────
 async function setPopup(visible) {
-    console.log(`[POPUP] setPopup(${visible}) — current state: ${popupOpen}`);
     popupOpen = visible;
     const popup = document.getElementById('popup-box');
-    if (popup) {
-        popup.classList.toggle('hidden', !popupOpen);
-        console.log(`[POPUP] popup-box classList: ${popup.className}`);
-    } else {
-        console.warn('[POPUP] popup-box element not found in DOM!');
-    }
+    if (popup) popup.classList.toggle('hidden', !popupOpen);
     await syncWindowHeight();
     await syncClickThrough();
     try { await emit('overlay-popup-changed', { open: popupOpen }); } catch (err) {
         console.warn('[POPUP] emit overlay-popup-changed failed:', err);
     }
-    console.log(`[POPUP] setPopup done — popupOpen: ${popupOpen}`);
 }
 
 // SVG markup for transport play/pause icon
@@ -146,7 +126,6 @@ const SVG_PLAY  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 // ── media UI update ────────────────────────────────────────
 function updateMedia(state) {
-    console.log(`[MEDIA] updateMedia — status:'${state.status}' title:'${state.title}' artist:'${state.artist}'`);
     const bar          = document.getElementById('main-bar');
     const timeEl       = document.getElementById('track-time');
     const artEl        = document.getElementById('album-art');
@@ -194,13 +173,8 @@ function updateMedia(state) {
 
 // ── init ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[BOOT] main.js DOMContentLoaded — starting overlay init');
-
-    // Load persisted settings from Rust/AppData
-    console.log('[BOOT] Invoking load_overlay_settings...');
     try {
         const loaded = await invoke('load_overlay_settings');
-        console.log('[BOOT] Settings loaded from backend:', loaded);
         await applySettings(loaded);
     } catch (err) {
         console.warn('[BOOT] load_overlay_settings failed, using defaults:', err);
@@ -210,59 +184,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Start in bar-only height, idle state
     const bar = document.getElementById('main-bar');
     bar.classList.add('idle');
-    console.log('[BOOT] Bar set to idle state');
     await setPopup(false);
-    console.log('[BOOT] Popup initialized (hidden)');
 
     // ── event listeners ──────────────────────────────────
     // Settings updated from settings window
     listen('overlay-settings-updated', async (e) => {
-        console.log('[EVENT] overlay-settings-updated received:', e.payload);
         await applySettings(e.payload);
     });
-    console.log('[BOOT] Listening for overlay-settings-updated');
 
     // Toggle popup from bar_button window via Rust broadcast
     listen('overlay-toggle-popup', async () => {
-        console.log(`[EVENT] overlay-toggle-popup received — toggling from ${popupOpen} to ${!popupOpen}`);
         await setPopup(!popupOpen);
     });
-    console.log('[BOOT] Listening for overlay-toggle-popup');
 
     // Close popup button
     document.getElementById('close-popup-btn').addEventListener('click', async () => {
-        console.log('[BTN] Close popup button clicked');
         await setPopup(false);
     });
 
     // Transport controls
     document.getElementById('prev-btn').addEventListener('click', async () => {
-        console.log('[BTN] Prev clicked');
         try { await invoke('media_prev'); } catch (err) { console.warn('[TRANSPORT] media_prev failed:', err); }
     });
     document.getElementById('play-pause-btn').addEventListener('click', async () => {
-        console.log('[BTN] Play/Pause clicked');
         try { await invoke('media_play_pause'); } catch (err) { console.warn('[TRANSPORT] media_play_pause failed:', err); }
     });
     document.getElementById('next-btn').addEventListener('click', async () => {
-        console.log('[BTN] Next clicked');
         try { await invoke('media_next'); } catch (err) { console.warn('[TRANSPORT] media_next failed:', err); }
     });
 
-    // Edit-mode dragging — only the bar, only when edit mode is on
+    // Edit-mode dragging
     document.getElementById('main-bar').addEventListener('mousedown', (e) => {
         if (!settings.editMode || e.button !== 0) return;
         if (e.target.closest('button')) return;
-        console.log('[DRAG] Edit-mode drag started');
         appWindow.startDragging();
     });
 
-    // Media updates from Rust mock loop
-    listen('media-update', (e) => {
-        console.log('[EVENT] media-update received:', e.payload);
-        updateMedia(e.payload);
-    });
-    console.log('[BOOT] Listening for media-update');
-
-    console.log('[BOOT] Overlay init complete');
+    listen('media-update', (e) => { updateMedia(e.payload); });
 });

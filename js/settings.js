@@ -25,29 +25,18 @@ function applyThemeLink(name) {
 function initTabs() {
     document.querySelectorAll('.nav-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            if (tab.classList.contains('placeholder')) {
-                console.log(`[TABS] Tab '${tab.dataset.tab}' is a placeholder — ignoring click`);
-                return;
-            }
-            console.log(`[TABS] Switching to tab: ${tab.dataset.tab}`);
+            if (tab.classList.contains('placeholder')) return;
             document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.settings-tab-view').forEach(v => v.classList.remove('active'));
-
             tab.classList.add('active');
             const view = document.getElementById(`view-${tab.dataset.tab}`);
-            if (view) {
-                view.classList.add('active');
-                console.log(`[TABS] View #view-${tab.dataset.tab} activated`);
-            } else {
-                console.warn(`[TABS] No view found for tab '${tab.dataset.tab}'`);
-            }
+            if (view) view.classList.add('active');
         });
     });
 }
 
 // ── Populate UI from a settings object ────────────────────
 function populateUI(s) {
-    console.log('[UI] populateUI called:', s);
     document.getElementById('theme-select').value          = s.theme;
     document.getElementById('active-opacity').value        = String(s.activeOpacity);
     document.getElementById('idle-opacity').value          = String(s.idleOpacity);
@@ -63,7 +52,6 @@ function populateUI(s) {
     applyThemeLink(s.theme);
     document.documentElement.style.setProperty('--accent-color', s.accentColor);
     document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
-    console.log('[UI] populateUI done');
 }
 
 // ── Read current UI values into an object ─────────────────
@@ -77,7 +65,6 @@ function readUI() {
         offsetX:       clamp(Number(document.getElementById('offset-x').value), 0, 80),
         offsetY:       clamp(Number(document.getElementById('offset-y').value), 0, 80),
     };
-    console.log('[UI] readUI result:', result);
     return result;
 }
 
@@ -86,7 +73,6 @@ function liveUpdate() {
     const activeVal = document.getElementById('active-opacity').value;
     const idleVal   = document.getElementById('idle-opacity').value;
     const hexVal    = document.getElementById('accent-color-picker').value;
-    console.log(`[UI] liveUpdate — active:${activeVal}% idle:${idleVal}% accent:${hexVal}`);
     document.getElementById('active-opacity-value').textContent = `${activeVal}%`;
     document.getElementById('idle-opacity-value').textContent   = `${idleVal}%`;
     document.getElementById('accent-hex-label').textContent     = hexVal;
@@ -105,17 +91,12 @@ function setStatus(msg, type = '') {
 
 // ── Main ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('[BOOT] settings.js DOMContentLoaded — starting settings init');
     initTabs();
-    console.log('[BOOT] Tabs initialized');
 
-    // Load saved settings from Rust / AppData
-    console.log('[BOOT] Invoking load_overlay_settings...');
     let current = { ...DEFAULTS };
     try {
         const loaded = await invoke('load_overlay_settings');
         current = { ...DEFAULTS, ...loaded };
-        console.log('[BOOT] Settings loaded from backend:', current);
     } catch (err) {
         console.warn('[BOOT] load_overlay_settings failed:', err);
         setStatus('Could not load settings — using defaults.', 'error');
@@ -123,53 +104,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     populateUI(current);
 
-    // Live readouts
     ['theme-select', 'active-opacity', 'idle-opacity',
      'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y']
         .forEach(id => document.getElementById(id).addEventListener('input', liveUpdate));
-    console.log('[BOOT] Live input listeners registered');
 
-    // Reset button
     document.getElementById('reset-btn').addEventListener('click', () => {
-        console.log('[BTN] Reset Defaults clicked');
         populateUI({ ...DEFAULTS });
         setStatus('Defaults loaded — click Save & Apply to commit.');
     });
 
-    // Save & Apply button
     document.getElementById('save-btn').addEventListener('click', async () => {
-        console.log('[BTN] Save & Apply clicked');
         const newSettings = readUI();
         setStatus('Saving…');
 
-        // Capture current bar position so it persists across restarts
         try {
             const pos = await invoke('get_main_position');
             newSettings.barX = pos.x;
             newSettings.barY = pos.y;
-            console.log(`[BTN] Bar position captured: (${pos.x}, ${pos.y})`);
         } catch (err) {
             console.warn('[BTN] get_main_position failed, keeping existing barX/barY:', err);
         }
 
         try {
-            console.log('[BTN] Invoking save_overlay_settings...');
             await invoke('save_overlay_settings', { settings: newSettings });
-            console.log('[BTN] save_overlay_settings OK');
             setStatus('Saved and applied.', 'success');
         } catch (err) {
-            console.error('[BTN] save_overlay_settings FAILED:', err);
             setStatus(`Save failed: ${String(err)}`, 'error');
             return;
         }
 
-        // Brief button feedback
-        const btn = document.getElementById('save-btn');
+        const btn  = document.getElementById('save-btn');
         const orig = btn.textContent;
         btn.textContent = 'Saved ✓';
         btn.disabled = true;
         setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1200);
     });
-
-    console.log('[BOOT] Settings init complete');
 });
