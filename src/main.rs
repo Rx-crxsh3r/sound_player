@@ -17,6 +17,17 @@ use windows::{
     Storage::Streams::DataReader,
 };
 
+// ── SMTC transport helper ──────────────────────────────────
+// Returns the current active SMTC session, or an error string.
+fn get_smtc_session(
+) -> Result<windows::Media::Control::GlobalSystemMediaTransportControlsSession, String> {
+    let manager = SmtcManager::RequestAsync()
+        .map_err(|e| e.to_string())?
+        .get()
+        .map_err(|e| e.to_string())?;
+    manager.GetCurrentSession().map_err(|_| "no active SMTC session".to_string())
+}
+
 // ── Media state (mock, emitted to frontend) ────────────────
 #[derive(Clone, serde::Serialize)]
 struct MediaState {
@@ -142,6 +153,34 @@ fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
     Ok(BarPosition { x: pos.x, y: pos.y })
 }
 
+// ── Transport commands ─────────────────────────────────────
+#[tauri::command]
+fn media_play_pause() -> Result<(), String> {
+    eprintln!("[CMD] media_play_pause");
+    get_smtc_session()?
+        .TryTogglePlayPauseAsync().map_err(|e| e.to_string())?
+        .get().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn media_next() -> Result<(), String> {
+    eprintln!("[CMD] media_next");
+    get_smtc_session()?
+        .TrySkipNextAsync().map_err(|e| e.to_string())?
+        .get().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn media_prev() -> Result<(), String> {
+    eprintln!("[CMD] media_prev");
+    get_smtc_session()?
+        .TrySkipPreviousAsync().map_err(|e| e.to_string())?
+        .get().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── bar_button window helpers ──────────────────────────────
 // The bar_button window is a tiny always-on-top interactive window
 // positioned at the left edge of the main overlay bar.
@@ -229,6 +268,9 @@ fn main() {
             toggle_overlay_popup,
             set_main_click_through,
             get_main_position,
+            media_play_pause,
+            media_next,
+            media_prev,
         ])
         .system_tray(build_tray())
         .on_system_tray_event(|app, event| match event {

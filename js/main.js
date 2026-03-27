@@ -37,8 +37,27 @@ function setTheme(name) {
 }
 
 // ── state ──────────────────────────────────────────────────
-let settings   = { ...DEFAULTS };
-let popupOpen  = false;
+let settings       = { ...DEFAULTS };
+let popupOpen      = false;
+let mediaState     = { status: 'idle', currentTime: 0, totalTime: 0 };
+let tickerInterval = null;
+
+// ── local time ticker ────────────────────────────────────
+function stopTicker() {
+    if (tickerInterval !== null) { clearInterval(tickerInterval); tickerInterval = null; }
+}
+function startTicker() {
+    stopTicker();
+    tickerInterval = setInterval(() => {
+        if (mediaState.status !== 'playing') return;
+        mediaState.currentTime = Math.min(mediaState.currentTime + 1, mediaState.totalTime);
+        const timeEl     = document.getElementById('track-time');
+        const progressEl = document.getElementById('progress-bar');
+        if (timeEl)     timeEl.textContent     = `${formatTime(mediaState.currentTime)} / ${formatTime(mediaState.totalTime)}`;
+        if (progressEl) progressEl.style.width = mediaState.totalTime > 0
+            ? `${clamp((mediaState.currentTime / mediaState.totalTime) * 100, 0, 100)}%` : '0%';
+    }, 1000);
+}
 
 // ── click-through sync ────────────────────────────────────
 // Bar must be interactive when popup is visible OR edit mode is on.
@@ -121,6 +140,10 @@ async function setPopup(visible) {
     console.log(`[POPUP] setPopup done — popupOpen: ${popupOpen}`);
 }
 
+// SVG markup for transport play/pause icon
+const SVG_PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="5" width="3" height="14" rx="1"/><rect x="15" y="5" width="3" height="14" rx="1"/></svg>';
+const SVG_PLAY  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>';
+
 // ── media UI update ────────────────────────────────────────
 function updateMedia(state) {
     console.log(`[MEDIA] updateMedia — status:'${state.status}' title:'${state.title}' artist:'${state.artist}'`);
@@ -130,8 +153,14 @@ function updateMedia(state) {
     const titleEl      = document.getElementById('track-title');
     const artistEl     = document.getElementById('track-artist');
     const progressEl   = document.getElementById('progress-bar');
+    const ppBtn        = document.getElementById('play-pause-btn');
 
     if (state.status === 'playing' || state.status === 'paused') {
+        // Sync authoritative time from SMTC (corrects ticker drift)
+        mediaState.status      = state.status;
+        mediaState.currentTime = state.current_time;
+        mediaState.totalTime   = state.total_time;
+
         bar.classList.toggle('playing', state.status === 'playing');
         bar.classList.toggle('idle',    state.status === 'paused');
 
@@ -144,7 +173,14 @@ function updateMedia(state) {
             ? clamp((state.current_time / state.total_time) * 100, 0, 100)
             : 0;
         progressEl.style.width = `${pct}%`;
+
+        if (ppBtn) ppBtn.innerHTML = state.status === 'playing' ? SVG_PAUSE : SVG_PLAY;
+
+        if (state.status === 'playing') startTicker(); else stopTicker();
     } else {
+        mediaState = { status: 'idle', currentTime: 0, totalTime: 0 };
+        stopTicker();
+
         bar.classList.remove('playing');
         bar.classList.add('idle');
         timeEl.textContent     = '--:-- / --:--';
@@ -152,6 +188,7 @@ function updateMedia(state) {
         artistEl.textContent   = 'Artist Name';
         artEl.src              = '';
         progressEl.style.width = '0%';
+        if (ppBtn) ppBtn.innerHTML = SVG_PLAY;
     }
 }
 
@@ -198,16 +235,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         await setPopup(false);
     });
 
-    // Transport placeholders — brief feedback in artist text
-    const artistEl = document.getElementById('track-artist');
-    function transportFeedback(label) {
-        const prev = artistEl.textContent;
-        artistEl.textContent = label;
-        setTimeout(() => { if (artistEl.textContent === label) artistEl.textContent = prev; }, 700);
-    }
-    document.getElementById('prev-btn').addEventListener('click',       () => { console.log('[BTN] Prev clicked'); transportFeedback('Previous…'); });
-    document.getElementById('play-pause-btn').addEventListener('click', () => { console.log('[BTN] Play/Pause clicked'); transportFeedback('Play/Pause…'); });
-    document.getElementById('next-btn').addEventListener('click',       () => { console.log('[BTN] Next clicked'); transportFeedback('Next…'); });
+    // Transport controls
+    document.getElementById('prev-btn').addEventListener('click', async () => {
+        console.log('[BTN] Prev clicked');
+        try { await invoke('media_prev'); } catch (err) { console.warn('[TRANSPORT] media_prev failed:', err); }
+    });
+    document.getElementById('play-pause-btn').addEventListener('click', async () => {
+        console.log('[BTN] Play/Pause clicked');
+        try { await invoke('media_play_pause'); } catch (err) { console.warn('[TRANSPORT] media_play_pause failed:', err); }
+    });
+    document.getElementById('next-btn').addEventListener('click', async () => {
+        console.log('[BTN] Next clicked');
+        try { await invoke('media_next'); } catch (err) { console.warn('[TRANSPORT] media_next failed:', err); }
+    });
 
     // Edit-mode dragging — only the bar, only when edit mode is on
     document.getElementById('main-bar').addEventListener('mousedown', (e) => {
