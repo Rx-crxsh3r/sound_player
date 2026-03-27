@@ -3,10 +3,18 @@
 
 use std::fs;
 use std::time::Duration;
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use tauri::{
     AppHandle, CustomMenuItem, Manager, PhysicalPosition,
     SystemTray, SystemTrayEvent, SystemTrayMenu,
     WindowBuilder, WindowEvent, WindowUrl,
+};
+use windows::{
+    Media::Control::{
+        GlobalSystemMediaTransportControlsSessionManager as SmtcManager,
+        GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
+    },
+    Storage::Streams::DataReader,
 };
 
 // ── Media state (mock, emitted to frontend) ────────────────
@@ -311,10 +319,10 @@ fn main() {
             sync_button_position(&handle);
             eprintln!("[BOOT] bar_button opened and positioned");
 
-            // Start mock media loop (dev/placeholder only).
-            eprintln!("[BOOT] Starting mock media loop...");
+            // Start SMTC media watcher.
+            eprintln!("[BOOT] Starting SMTC media watcher...");
             let h = handle.clone();
-            tauri::async_runtime::spawn(async move { mock_media_loop(h).await; });
+            tauri::async_runtime::spawn(async move { smtc_loop(h).await; });
             eprintln!("[BOOT] Setup complete — app is running");
 
             Ok(())
@@ -323,21 +331,133 @@ fn main() {
         .expect("error running tauri application");
 }
 
-// ── Mock media loop (dev placeholder) ─────────────────────
-async fn mock_media_loop(handle: AppHandle) {
-    eprintln!("[MEDIA] Mock media loop started");
-    let states: &[MediaState] = &[
-        MediaState { status: "idle".into(),    title: "".into(), artist: "".into(), album_art_url: "".into(), current_time: 0,   total_time: 0   },
-        MediaState { status: "playing".into(), title: "Starlight".into(), artist: "Muse".into(),            album_art_url: "".into(), current_time: 83,  total_time: 240 },
-        MediaState { status: "playing".into(), title: "Bohemian Rhapsody".into(), artist: "Queen".into(),   album_art_url: "".into(), current_time: 150, total_time: 355 },
-    ];
-    let mut i = 0usize;
+// ── SMTC media watcher ────────────────────────────────────
+// Polls the Windows SMTC API every second.  When the active
+// session or its properties change we emit a media-update event
+// to the frontend.  This replaces the old mock loop entirely.
+async fn smtc_loop(handle: AppHandle) {
+    eprintln!("[MEDIA] SMTC watcher started");
+
+    // Give Windows a moment to finish initialising COM on the async thread.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    let mut last_title  = String::new();
+    let mut last_status = String::new();
+
     loop {
-        let s = &states[i];
-        eprintln!("[MEDIA] Emitting media-update [{}] status='{}' title='{}'", i, s.status, s.title);
-        let _ = handle.emit_all("media-update", s);
-        tokio::time::sleep(Duration::from_secs(5)).await;
-        i = (i + 1) % states.len();
+        match poll_smtc() {
+            Ok(state) => {
+                // Only emit when something actually changed — avoids spamming
+                // the frontend on every tick.
+                if state.title != last_title || state.status != last_status {
+                    eprintln!("[MEDIA] State changed — status:'{}' title:'{}'",
+                        state.status, state.title);
+                    last_title  = state.title.clone();
+                    last_status = state.status.clone();
+                    let _ = handle.emit_all("media-update", &state);
+                }
+            }
+            Err(e) => {
+                eprintln!("[MEDIA] poll_smtc error: {}", e);
+                // Emit idle so the bar doesn't stay stuck on old track info.
+                if last_status != "idle" {
+                    last_status = "idle".into();
+                    last_title  = String::new();
+                    let _ = handle.emit_all("media-update", &MediaState {
+                        status:        "idle".into(),
+                        title:         String::new(),
+                        artist:        String::new(),
+                        album_art_url: String::new(),
+                        current_time:  0,
+                        total_time:    0,
+                    });
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
+}
+
+fn poll_smtc() -> Result<MediaState, String> {
+    // Acquire the session manager synchronously (it's a thin COM call).
+    let manager = SmtcManager::RequestAsync()
+        .map_err(|e| e.to_string())?
+        .get()
+        .map_err(|e| e.to_string())?;
+
+    let session = manager
+        .GetCurrentSession()
+        .map_err(|_| "no active SMTC session".to_string())?;
+
+    // ── Playback state ──
+    let playback = session
+        .GetPlaybackInfo()
+        .map_err(|e| e.to_string())?;
+
+    let status_enum = playback
+        .PlaybackStatus()
+        .map_err(|e| e.to_string())?;
+
+    let status = match status_enum {
+        PlaybackStatus::Playing => "playing",
+        PlaybackStatus::Paused  => "paused",
+        _                        => "idle",
+    }.to_string();
+
+    // ── Media properties ──
+    let props = session
+        .TryGetMediaPropertiesAsync()
+        .map_err(|e| e.to_string())?
+        .get()
+        .map_err(|e| e.to_string())?;
+
+    let title  = props.Title() .unwrap_or_default().to_string();
+    let artist = props.Artist().unwrap_or_default().to_string();
+
+    // ── Timeline ──
+    let (current_time, total_time) = session
+        .GetTimelineProperties()
+        .map(|tl| {
+            let pos      = tl.Position().unwrap_or_default();
+            let end      = tl.EndTime().unwrap_or_default();
+            // Duration is in 100-nanosecond ticks.
+            let current  = (pos.Duration  / 10_000_000) as u32;
+            let total    = (end.Duration  / 10_000_000) as u32;
+            (current, total)
+        })
+        .unwrap_or((0, 0));
+
+    // ── Album art (optional — fall back to empty string on any error) ──
+    let album_art_url = read_album_art(&props).unwrap_or_default();
+
+    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time })
+}
+
+fn read_album_art(
+    props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Result<String, String> {
+    let thumb_ref = props.Thumbnail().map_err(|e| e.to_string())?;
+
+    let stream = thumb_ref
+        .OpenReadAsync()
+        .map_err(|e| e.to_string())?
+        .get()
+        .map_err(|e| e.to_string())?;
+
+    let size = stream.Size().map_err(|e| e.to_string())? as u32;
+    if size == 0 { return Err("empty art stream".into()); }
+
+    let reader = DataReader::CreateDataReader(&stream).map_err(|e| e.to_string())?;
+    reader.LoadAsync(size).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
+
+    let mut buf = vec![0u8; size as usize];
+    reader.ReadBytes(&mut buf).map_err(|e| e.to_string())?;
+
+    // Detect MIME type from magic bytes.
+    let mime = if buf.starts_with(b"\xFF\xD8\xFF") { "image/jpeg" }
+               else if buf.starts_with(b"\x89PNG")  { "image/png"  }
+               else                                   { "image/jpeg" };
+
+    Ok(format!("data:{};base64,{}", mime, B64.encode(&buf)))
 }
 

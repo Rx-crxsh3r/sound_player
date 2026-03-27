@@ -131,9 +131,9 @@ function updateMedia(state) {
     const artistEl     = document.getElementById('track-artist');
     const progressEl   = document.getElementById('progress-bar');
 
-    if (state.status === 'playing') {
-        bar.classList.replace('idle', 'playing') || bar.classList.add('playing');
-        bar.classList.remove('idle');
+    if (state.status === 'playing' || state.status === 'paused') {
+        bar.classList.toggle('playing', state.status === 'playing');
+        bar.classList.toggle('idle',    state.status === 'paused');
 
         timeEl.textContent    = `${formatTime(state.current_time)} / ${formatTime(state.total_time)}`;
         titleEl.textContent   = state.title;
@@ -148,6 +148,9 @@ function updateMedia(state) {
         bar.classList.remove('playing');
         bar.classList.add('idle');
         timeEl.textContent     = '--:-- / --:--';
+        titleEl.textContent    = 'Track Title';
+        artistEl.textContent   = 'Artist Name';
+        artEl.src              = '';
         progressEl.style.width = '0%';
     }
 }
