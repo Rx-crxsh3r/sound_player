@@ -396,7 +396,7 @@ fn audio_loop(handle: AppHandle) {
     let channels    = supported.channels() as usize;
     let config      = supported.config();
 
-    const FFT_SIZE: usize = 2048;
+    const FFT_SIZE: usize = 1024;
     // Tuning constant — raise if bars are too dim, lower if they clip.
     const GAIN: f32 = 300.0;
 

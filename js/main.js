@@ -229,24 +229,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         ? [...freqLine.querySelectorAll('.bar')]
         : [];
     let freqFallbackTimer = null;
+    let freqRafPending     = false;
+    let freqLatestBands    = null;
 
     listen('audio-freq', (e) => {
         if (!freqLine || freqBars.length === 0) return;
-        const bands = e.payload; // [f32; 8]
+        freqLatestBands = e.payload; // [f32; 24]
 
-        freqLine.classList.add('live');
-        bands.forEach((v, i) => {
-            if (freqBars[i]) {
-                // Min scale keeps bars visible even at very low signal.
-                freqBars[i].style.transform = `scaleY(${Math.max(0.08, v)})`;
-            }
-        });
+        // Coalesce rapid events — only schedule one rAF per paint frame.
+        if (!freqRafPending) {
+            freqRafPending = true;
+            requestAnimationFrame(() => {
+                freqRafPending = false;
+                if (!freqLatestBands) return;
 
-        // If no new data arrives for 1.5 s, fall back to the CSS animation.
-        clearTimeout(freqFallbackTimer);
-        freqFallbackTimer = setTimeout(() => {
-            freqLine.classList.remove('live');
-            freqBars.forEach(b => { b.style.transform = ''; });
-        }, 1500);
+                if (!freqLine.classList.contains('live')) freqLine.classList.add('live');
+                freqLatestBands.forEach((v, i) => {
+                    if (freqBars[i]) freqBars[i].style.transform = `scaleY(${Math.max(0.08, v)})`;
+                });
+
+                // If no new data arrives for 1.5 s, fall back to the CSS animation.
+                clearTimeout(freqFallbackTimer);
+                freqFallbackTimer = setTimeout(() => {
+                    freqLine.classList.remove('live');
+                    freqBars.forEach(b => { b.style.transform = ''; });
+                }, 1500);
+            });
+        }
     });
 });
