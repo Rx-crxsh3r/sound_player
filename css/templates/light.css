@@ -29,8 +29,11 @@
   --ui-accent-row-border:    rgba(0, 0, 0, 0.10);
   --ui-accent-row-bg:        rgba(0, 0, 0, 0.03);
   --ui-actions-border:       rgba(0, 0, 0, 0.09);
-  --ui-btn-ghost-border:     rgba(0, 0, 0, 0.15);
-  --ui-btn-ghost-hover-border: rgba(0, 0, 0, 0.30);
+  --ui-btn-ghost-border:        rgba(0, 0, 0, 0.15);
+  --ui-btn-ghost-hover-border:  rgba(0, 0, 0, 0.30);
+  --ui-scrollbar-track:         rgba(0, 0, 0, 0.05);
+  --ui-scrollbar-thumb:         rgba(0, 0, 0, 0.18);
+  --ui-scrollbar-thumb-hover:   rgba(0, 0, 0, 0.32);
 }
 
 body {

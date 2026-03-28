@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use tauri::{
@@ -54,8 +55,9 @@ struct OverlaySettings {
     // Saved bar window position (physical pixels). 0,0 = top-left (default).
     bar_x:               i32,
     bar_y:               i32,
-    visualizer_gain:     f32,
-    visualizer_smoothing: f32,
+    visualizer_gain:      f32,
+    visualizer_smoothing:  f32,
+    visualizer_enabled:    bool,
 }
 
 impl Default for OverlaySettings {
@@ -70,8 +72,9 @@ impl Default for OverlaySettings {
             offset_y:       0,
             bar_x:               0,
             bar_y:               0,
-            visualizer_gain:     1.0,
-            visualizer_smoothing: 0.20,
+            visualizer_gain:      1.0,
+            visualizer_smoothing:  0.20,
+            visualizer_enabled:    true,
         }
     }
 }
@@ -124,6 +127,16 @@ fn set_main_click_through(handle: AppHandle, pass_through: bool) {
 // Position of the main bar window (physical pixels)
 #[derive(serde::Serialize)]
 struct BarPosition { x: i32, y: i32 }
+
+// Shared flag — audio_loop reads this every tick to decide whether to emit.
+struct VisualizerEnabled(Arc<AtomicBool>);
+
+#[tauri::command]
+fn set_visualizer_enabled(handle: AppHandle, enabled: bool) {
+    if let Some(state) = handle.try_state::<VisualizerEnabled>() {
+        state.0.store(enabled, Ordering::Relaxed);
+    }
+}
 
 #[tauri::command]
 fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
@@ -220,6 +233,7 @@ fn main() {
             save_overlay_settings,
             toggle_overlay_popup,
             set_main_click_through,
+            set_visualizer_enabled,
             get_main_position,
             media_play_pause,
             media_next,
@@ -273,6 +287,9 @@ fn main() {
             let handle = app.handle();
             let saved  = read_settings(&handle);
 
+            let viz_flag = Arc::new(AtomicBool::new(saved.visualizer_enabled));
+            app.manage(VisualizerEnabled(viz_flag.clone()));
+
             if let Some(main) = app.get_window("main") {
                 if let Ok(Some(monitor)) = main.current_monitor() {
                     let screen_w = monitor.size().width as f64 / monitor.scale_factor();
@@ -289,7 +306,7 @@ fn main() {
             tauri::async_runtime::spawn(async move { smtc_loop(h).await; });
 
             let h2 = handle.clone();
-            std::thread::spawn(move || audio_loop(h2));
+            std::thread::spawn(move || audio_loop(h2, viz_flag));
 
             Ok(())
         })
@@ -379,7 +396,7 @@ fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
 // Captures WASAPI loopback (system audio output), runs an FFT every ~33 ms,
 // and emits an `audio-freq` event with 8 normalised band values (0.0–1.0).
 // The frontend uses these to drive the EQ bar animation.
-fn audio_loop(handle: AppHandle) {
+fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
     // Prefer the WASAPI host so we can open the output device as a loopback input.
@@ -442,6 +459,7 @@ fn audio_loop(handle: AppHandle) {
             buf[buf.len() - FFT_SIZE..].to_vec()
         };
 
+        if !enabled.load(Ordering::Relaxed) { continue; }
         let bands = compute_bands(&window, sample_rate, &mut planner, GAIN);
         let _ = handle.emit_all("audio-freq", &bands);
     }

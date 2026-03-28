@@ -99,6 +99,22 @@ html, body {
   padding-bottom: 8px;
 }
 
+/* ── Scrollbar ───────────────────────────────────────────── */
+.settings-tab-view::-webkit-scrollbar {
+  width: 6px;
+}
+.settings-tab-view::-webkit-scrollbar-track {
+  background: var(--ui-scrollbar-track);
+  border-radius: 3px;
+}
+.settings-tab-view::-webkit-scrollbar-thumb {
+  background: var(--ui-scrollbar-thumb);
+  border-radius: 3px;
+}
+.settings-tab-view::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-scrollbar-thumb-hover);
+}
+
 h1 {
   margin: 0 0 14px;
   font-size: 1.6rem;

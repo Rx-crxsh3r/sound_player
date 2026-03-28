@@ -15,6 +15,7 @@ const DEFAULTS = {
     barY:                0,
     visualizerGain:      1.0,
     visualizerSmoothing: 0.20,
+    visualizerEnabled:   true,
 };
 
 const BAR_HEIGHT     = 54;   // must match tauri.conf window height
@@ -93,6 +94,19 @@ async function applySettings(s) {
     root.style.setProperty('--accent-color', settings.accentColor || DEFAULTS.accentColor);
 
     document.body.classList.toggle('edit-mode', Boolean(settings.editMode));
+
+    // Visualizer enable/disable
+    const vizEnabled = settings.visualizerEnabled !== false;
+    try { await invoke('set_visualizer_enabled', { enabled: vizEnabled }); } catch (_) {}
+    if (!vizEnabled && rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+        if (freqLine) {
+            freqLine.classList.remove('live');
+            freqBars.forEach(b => { b.style.transform = ''; });
+        }
+    }
+
     await syncClickThrough();
 
     if (typeof settings.barX === 'number' && typeof settings.barY === 'number') {

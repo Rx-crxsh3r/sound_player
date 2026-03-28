@@ -30,8 +30,11 @@
   --ui-accent-row-border:    rgba(255, 255, 255, 0.09);
   --ui-accent-row-bg:        rgba(255, 255, 255, 0.04);
   --ui-actions-border:       rgba(255, 255, 255, 0.07);
-  --ui-btn-ghost-border:     rgba(255, 255, 255, 0.14);
-  --ui-btn-ghost-hover-border: rgba(255, 255, 255, 0.28);
+  --ui-btn-ghost-border:        rgba(255, 255, 255, 0.14);
+  --ui-btn-ghost-hover-border:  rgba(255, 255, 255, 0.28);
+  --ui-scrollbar-track:         rgba(255, 255, 255, 0.04);
+  --ui-scrollbar-thumb:         rgba(255, 255, 255, 0.16);
+  --ui-scrollbar-thumb-hover:   rgba(255, 255, 255, 0.30);
 }
 
 body {
