@@ -52,8 +52,10 @@ struct OverlaySettings {
     offset_x:       u8,
     offset_y:       u8,
     // Saved bar window position (physical pixels). 0,0 = top-left (default).
-    bar_x:          i32,
-    bar_y:          i32,
+    bar_x:               i32,
+    bar_y:               i32,
+    visualizer_gain:     f32,
+    visualizer_smoothing: f32,
 }
 
 impl Default for OverlaySettings {
@@ -66,8 +68,10 @@ impl Default for OverlaySettings {
             edit_mode:      false,
             offset_x:       0,
             offset_y:       0,
-            bar_x:          0,
-            bar_y:          0,
+            bar_x:               0,
+            bar_y:               0,
+            visualizer_gain:     1.0,
+            visualizer_smoothing: 0.20,
         }
     }
 }

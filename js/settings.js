@@ -2,15 +2,17 @@ const { invoke } = window.__TAURI__.tauri;
 
 // ── Defaults (must match Rust OverlaySettings default) ────
 const DEFAULTS = {
-    theme:         'dark',
-    activeOpacity: 85,
-    idleOpacity:   50,
-    accentColor:   '#1DB954',
-    editMode:      false,
-    offsetX:       0,
-    offsetY:       0,
-    barX:          0,
-    barY:          0,
+    theme:               'dark',
+    activeOpacity:       85,
+    idleOpacity:         50,
+    accentColor:         '#1DB954',
+    editMode:            false,
+    offsetX:             0,
+    offsetY:             0,
+    barX:                0,
+    barY:                0,
+    visualizerGain:      1.0,
+    visualizerSmoothing: 0.20,
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -56,6 +58,11 @@ function populateUI(s) {
     document.getElementById('idle-opacity-value').textContent   = `${s.idleOpacity}%`;
     document.getElementById('accent-hex-label').textContent     = `${s.accentColor}`;
 
+    document.getElementById('visualizer-gain').value              = String(s.visualizerGain);
+    document.getElementById('visualizer-smoothing').value         = String(s.visualizerSmoothing);
+    document.getElementById('visualizer-gain-value').textContent      = `${Number(s.visualizerGain).toFixed(1)}×`;
+    document.getElementById('visualizer-smoothing-value').textContent = `${Math.round(s.visualizerSmoothing * 100)}%`;
+
     applyThemeLink(s.theme);
     document.documentElement.style.setProperty('--accent-color', s.accentColor);
     document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
@@ -69,8 +76,10 @@ function readUI() {
         idleOpacity:   clamp(Number(document.getElementById('idle-opacity').value),   10, 100),
         accentColor:   document.getElementById('accent-color-picker').value,
         editMode:      document.getElementById('edit-mode-toggle').checked,
-        offsetX:       clamp(Number(document.getElementById('offset-x').value), 0, 80),
-        offsetY:       clamp(Number(document.getElementById('offset-y').value), 0, 80),
+        offsetX:             clamp(Number(document.getElementById('offset-x').value), 0, 80),
+        offsetY:             clamp(Number(document.getElementById('offset-y').value), 0, 80),
+        visualizerGain:      parseFloat(document.getElementById('visualizer-gain').value),
+        visualizerSmoothing: parseFloat(document.getElementById('visualizer-smoothing').value),
     };
     return result;
 }
@@ -83,6 +92,11 @@ function liveUpdate() {
     document.getElementById('active-opacity-value').textContent = `${activeVal}%`;
     document.getElementById('idle-opacity-value').textContent   = `${idleVal}%`;
     document.getElementById('accent-hex-label').textContent     = hexVal;
+
+    const gainVal      = document.getElementById('visualizer-gain').value;
+    const smoothingVal = document.getElementById('visualizer-smoothing').value;
+    document.getElementById('visualizer-gain-value').textContent      = `${parseFloat(gainVal).toFixed(1)}×`;
+    document.getElementById('visualizer-smoothing-value').textContent = `${Math.round(parseFloat(smoothingVal) * 100)}%`;
 
     applyThemeLink(document.getElementById('theme-select').value);
     document.documentElement.style.setProperty('--accent-color', hexVal);
@@ -112,7 +126,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     populateUI(current);
 
     ['theme-select', 'active-opacity', 'idle-opacity',
-     'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y']
+     'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y',
+     'visualizer-gain', 'visualizer-smoothing']
         .forEach(id => document.getElementById(id).addEventListener('input', liveUpdate));
 
     document.getElementById('reset-btn').addEventListener('click', () => {

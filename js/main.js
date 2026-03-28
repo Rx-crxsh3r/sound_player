@@ -4,15 +4,17 @@ const { appWindow, LogicalSize, PhysicalPosition } = window.__TAURI__.window;
 
 // ── defaults (fallback if backend unreachable) ─────────────
 const DEFAULTS = {
-    theme:         'dark',
-    activeOpacity: 85,
-    idleOpacity:   50,
-    accentColor:   '#1DB954',
-    editMode:      false,
-    offsetX:       0,
-    offsetY:       0,
-    barX:          0,
-    barY:          0,
+    theme:               'dark',
+    activeOpacity:       85,
+    idleOpacity:         50,
+    accentColor:         '#1DB954',
+    editMode:            false,
+    offsetX:             0,
+    offsetY:             0,
+    barX:                0,
+    barY:                0,
+    visualizerGain:      1.0,
+    visualizerSmoothing: 0.20,
 };
 
 const BAR_HEIGHT     = 54;   // must match tauri.conf window height
@@ -223,38 +225,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     listen('media-update', (e) => { updateMedia(e.payload); });
 
     // ── Audio frequency visualizer ──────────────────────────
-    // Cache bar elements once — avoids querySelector on every 33 ms tick.
-    const freqLine = document.getElementById('animated-line');
-    const freqBars = freqLine
-        ? [...freqLine.querySelectorAll('.bar')]
-        : [];
-    let freqFallbackTimer = null;
-    let freqRafPending     = false;
-    let freqLatestBands    = null;
+    // Bar elements cached once. barTarget receives raw FFT data; barCurrent
+    // lerps toward it every rAF tick for smooth animation.
+    const freqLine   = document.getElementById('animated-line');
+    const freqBars   = freqLine ? [...freqLine.querySelectorAll('.bar')] : [];
+    const barCurrent = new Float32Array(24).fill(0.08);
+    const barTarget  = new Float32Array(24).fill(0.08);
+    let   rafId             = null;
+    let   freqActive        = false;
+    let   freqFallbackTimer = null;
+
+    function freqTick() {
+        const smooth   = settings.visualizerSmoothing ?? 0.20;
+        const gain     = settings.visualizerGain      ?? 1.0;
+        const lerpRate = 1 - smooth;
+        let   settled  = true;
+
+        for (let i = 0; i < freqBars.length; i++) {
+            const t = Math.min(1.0, Math.max(0.08, barTarget[i] * gain));
+            barCurrent[i] += (t - barCurrent[i]) * lerpRate;
+            if (freqBars[i]) freqBars[i].style.transform = `scaleY(${barCurrent[i].toFixed(3)})`;
+            if (Math.abs(t - barCurrent[i]) > 0.004) settled = false;
+        }
+
+        if (settled && !freqActive) {
+            // All bars settled at idle floor — hand control back to CSS animation.
+            rafId = null;
+            freqLine.classList.remove('live');
+            freqBars.forEach(b => { b.style.transform = ''; });
+        } else {
+            rafId = requestAnimationFrame(freqTick);
+        }
+    }
+
+    function startFreqLoop() {
+        if (rafId !== null) return;
+        rafId = requestAnimationFrame(freqTick);
+    }
 
     listen('audio-freq', (e) => {
         if (!freqLine || freqBars.length === 0) return;
-        freqLatestBands = e.payload; // [f32; 24]
+        const bands = e.payload; // [f32; 24]
+        bands.forEach((v, i) => { if (i < barTarget.length) barTarget[i] = v; });
 
-        // Coalesce rapid events — only schedule one rAF per paint frame.
-        if (!freqRafPending) {
-            freqRafPending = true;
-            requestAnimationFrame(() => {
-                freqRafPending = false;
-                if (!freqLatestBands) return;
+        freqActive = true;
+        if (!freqLine.classList.contains('live')) freqLine.classList.add('live');
+        startFreqLoop();
 
-                if (!freqLine.classList.contains('live')) freqLine.classList.add('live');
-                freqLatestBands.forEach((v, i) => {
-                    if (freqBars[i]) freqBars[i].style.transform = `scaleY(${Math.max(0.08, v)})`;
-                });
-
-                // If no new data arrives for 1.5 s, fall back to the CSS animation.
-                clearTimeout(freqFallbackTimer);
-                freqFallbackTimer = setTimeout(() => {
-                    freqLine.classList.remove('live');
-                    freqBars.forEach(b => { b.style.transform = ''; });
-                }, 1500);
-            });
-        }
+        // No new data for 1.5 s — push targets to idle floor and let loop settle.
+        clearTimeout(freqFallbackTimer);
+        freqFallbackTimer = setTimeout(() => {
+            freqActive = false;
+            for (let i = 0; i < barTarget.length; i++) barTarget[i] = 0.08;
+            startFreqLoop();
+        }, 1500);
     });
 });
