@@ -68,14 +68,18 @@ html, body {
   pointer-events: none;
 }
 
-/* EQ visualizer: anchored to the very bottom of the dip.
+/* EQ visualizer: anchored to the bottom of the dip (54px from the bar's own
+   top — NOT the bar's bottom edge, since #main-bar grows taller than 54px
+   while showing bar-mode lyrics and bottom:0 would drag the bars down with
+   it; top:4px = 54px dip tip minus the bars' own 50px height, so they stay
+   put at the original spot regardless of the bar's total height).
    Bars are a uniform 50px — the clip-path on #main-bar naturally
    shears outer bars shorter, giving the smooth silhouette without
    any manual per-bar height calculation. */
 #animated-line {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  top: 4px;
   transform: translateX(-50%);
   display: flex;
   align-items: flex-end;
@@ -115,6 +119,16 @@ html, body {
 #main-bar.playing #animated-line { display: flex; }
 #main-bar.playing .idle-text   { display: none; }
 
+/* Visualizer fully disabled in Settings — bars must not render at all, not
+   just stop being audio-reactive. Without this, "disabled" still played
+   the default idle bounce animation forever whenever a track was playing,
+   which reads as a different (non-reactive) visualizer pattern rather than
+   an actually-off one. !important because it must win over the
+   .idle/.playing display rules above regardless of source order. */
+#main-bar.viz-off #animated-line {
+  display: none !important;
+}
+
 /* Right slot: time — pushed to far right */
 #track-time {
   margin-left: auto;
@@ -123,133 +137,41 @@ html, body {
   line-height: 22px;      /* keep text within the 26px flat clip-path region */
 }
 
-/* ── Popup box ──────────────────────────────────────────── */
-#popup-box {
+/* ── Bar-mode lyrics ────────────────────────────────────── */
+/* Rendered inside #main-bar itself (not a separate element) so it shares
+   the bar's own background/blur/shadow — one panel that grew taller, not
+   a second box stacked underneath. Coexists with the visualizer (the EQ
+   bars above stay correctly anchored via #animated-line's top:4px, so they
+   don't shift when the bar grows). The tapered dip shape only makes sense
+   at the compact 54px height, so this state drops it for a plain rounded
+   rectangle — same treatment the popup and other panels already use. */
+#main-bar.showing-bar-lyric {
+  clip-path: none;
+  height: 84px;
+  border-radius: 0 0 12px 12px;
+}
+
+#bar-lyric-line {
+  display: none;
   position: absolute;
-  top: 58px;              /* just below the taller bar */
-  left: 14px;
-  width: 290px;
-  border-radius: 14px;
-  padding: 14px;
-  box-sizing: border-box;
-
-  display: flex;
-  align-items: center;
-  gap: 0;
-
-  pointer-events: auto;
-
-  /* Show/hide transition */
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  transition: opacity 0.22s ease, transform 0.22s ease;
-}
-
-#popup-box.hidden {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.97);
-  pointer-events: none;
-}
-
-#album-art {
-  width: 76px;
-  height: 76px;
-  border-radius: 8px;
-  flex-shrink: 0;
-  background-size: cover;
-  background-position: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Placeholder icon — shown until real album art loads (some sources
-   don't expose SMTC thumbnails at all, so this is the common case, not
-   an edge case). Rendered as a mask so it inherits theme color. */
-#album-art::before {
-  content: '';
-  width: 34px;
-  height: 34px;
-  background-color: var(--text-color-muted, #a0a0a0);
-  opacity: 0.55;
-  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>") center/60% no-repeat;
-  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>") center/60% no-repeat;
-  transition: opacity 0.15s ease;
-}
-
-#album-art.has-art::before {
-  opacity: 0;
-}
-
-.info-wrapper {
-  flex: 1;
-  padding: 0 12px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-#track-info p {
+  left: 0;
+  right: 0;
+  top: 54px;
+  height: 30px;
   margin: 0;
+  padding: 0 18px;
+  box-sizing: border-box;
+  line-height: 30px;
+  text-align: center;
+  font-size: 0.80rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  pointer-events: none;
 }
 
-#track-title  { font-weight: 600; font-size: 0.95rem; }
-#track-artist { font-size: 0.78rem; margin-top: 3px; }
-
-.progress-bar-container {
-  width: 100%;
-  height: 4px;
-  border-radius: 2px;
-  margin-top: 14px;
-  overflow: hidden;
-}
-
-#progress-bar {
-  height: 100%;
-  width: 0%;
-  border-radius: 2px;
-  transition: width 0.25s linear;
-}
-
-#transport-controls {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
-}
-
-.transport-btn {
-  border-radius: 999px;
-  border: 1px solid transparent;
-  background: transparent;
-  font-size: 0.80rem;
-  min-width: 46px;
-  height: 38px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.transport-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-#close-popup-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: none;
-  border: none;
-  font-size: 0.80rem;
-  cursor: pointer;
-  padding: 4px 6px;
-  line-height: 1;
+#main-bar.showing-bar-lyric #bar-lyric-line {
+  display: block;
 }
 
 /* ── Edit mode ──────────────────────────────────────────── */

@@ -1,0 +1,171 @@
+/* =========================================================
+   POPUP WINDOW — its own small always-on-top OS window (see
+   open_popup_window in src/main.rs). Runtime-themed values
+   (--accent-color, --popup-bg-opacity) are applied by js/popup.js,
+   since this window has its own isolated document/DOM.
+   ========================================================= */
+
+:root {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  --popup-bg-opacity: 0.85;
+  --accent-color: #1DB954;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+#popup-box {
+  position: relative;
+  width: 290px;
+  border-radius: 14px;
+  padding: 14px;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.popup-top-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+#album-art {
+  width: 76px;
+  height: 76px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Placeholder icon — shown until real album art loads (some sources
+   don't expose SMTC thumbnails at all, so this is the common case, not
+   an edge case). Rendered as a mask so it inherits theme color. */
+#album-art::before {
+  content: '';
+  width: 34px;
+  height: 34px;
+  background-color: var(--text-color-muted, #a0a0a0);
+  opacity: 0.55;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>") center/60% no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M9 18V5l12-2v13'/><circle cx='6' cy='18' r='3'/><circle cx='18' cy='16' r='3'/></svg>") center/60% no-repeat;
+  transition: opacity 0.15s ease;
+}
+
+#album-art.has-art::before {
+  opacity: 0;
+}
+
+.info-wrapper {
+  flex: 1;
+  padding: 0 12px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+#track-info p {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#track-title  { font-weight: 600; font-size: 0.95rem; }
+#track-artist { font-size: 0.78rem; margin-top: 3px; }
+
+.progress-bar-container {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 14px;
+  overflow: hidden;
+}
+
+#progress-bar {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  transition: width 0.25s linear;
+}
+
+#transport-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.transport-btn {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 0.80rem;
+  min-width: 46px;
+  height: 38px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transport-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Lyrics panel ───────────────────────────────────────── */
+#lyrics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 12px;
+  text-align: center;
+}
+
+#lyrics-panel.hidden {
+  display: none;
+}
+
+.lyrics-line {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-color-muted);
+  opacity: 0.55;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.lyrics-line.current {
+  color: var(--text-color);
+  opacity: 1;
+  font-weight: 600;
+}
+
+#close-popup-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: none;
+  border: none;
+  font-size: 0.80rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  line-height: 1;
+}

@@ -15,6 +15,8 @@ const DEFAULTS = {
     visualizerSmoothing: 0.20,
     visualizerEnabled:   true,
     visualizerBands:     24,
+    lyricsEnabled:       false,
+    lyricsDisplayMode:   'popup',
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -67,6 +69,9 @@ function populateUI(s) {
     document.getElementById('visualizer-gain-value').textContent      = `${Number(s.visualizerGain).toFixed(1)}×`;
     document.getElementById('visualizer-smoothing-value').textContent = `${Math.round(s.visualizerSmoothing * 100)}%`;
 
+    document.getElementById('lyrics-enabled-toggle').checked = Boolean(s.lyricsEnabled);
+    document.getElementById('lyrics-display-mode').value     = s.lyricsDisplayMode === 'bar' ? 'bar' : 'popup';
+
     applyThemeLink(s.theme);
     document.documentElement.style.setProperty('--accent-color', s.accentColor);
     document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
@@ -86,6 +91,8 @@ function readUI() {
         visualizerBands:     Number(document.getElementById('visualizer-bands').value),
         visualizerGain:      parseFloat(document.getElementById('visualizer-gain').value),
         visualizerSmoothing: parseFloat(document.getElementById('visualizer-smoothing').value),
+        lyricsEnabled:       document.getElementById('lyrics-enabled-toggle').checked,
+        lyricsDisplayMode:   document.getElementById('lyrics-display-mode').value,
     };
     return result;
 }
@@ -133,8 +140,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     ['theme-select', 'active-opacity', 'idle-opacity',
      'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y',
-     'visualizer-enabled', 'visualizer-bands', 'visualizer-gain', 'visualizer-smoothing']
+     'visualizer-enabled', 'visualizer-bands', 'visualizer-gain', 'visualizer-smoothing',
+     'lyrics-enabled-toggle', 'lyrics-display-mode']
         .forEach(id => document.getElementById(id).addEventListener('input', liveUpdate));
+
+    document.getElementById('clear-lyrics-cache-btn').addEventListener('click', async () => {
+        const status = document.getElementById('lyrics-cache-status');
+        try {
+            await invoke('clear_lyrics_cache');
+            if (status) status.textContent = 'Cache cleared.';
+        } catch (err) {
+            if (status) status.textContent = `Failed: ${String(err)}`;
+        }
+        setTimeout(() => { if (status) status.textContent = ''; }, 2000);
+    });
 
     document.getElementById('reset-btn').addEventListener('click', () => {
         populateUI({ ...DEFAULTS });

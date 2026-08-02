@@ -5,6 +5,11 @@
    ========================================================= */
 
 :root {
+  /* Lets native controls (select dropdown popups, etc.) render themselves
+     in the matching dark chrome instead of defaulting to the OS's own
+     light rendering, which otherwise ignores our own CSS entirely. */
+  color-scheme: dark;
+
   --bg-color-rgb:        25, 20, 20;
   --bg-color:            rgba(var(--bg-color-rgb), 0.88);
   --bg-color-solid:      rgb(var(--bg-color-rgb));
@@ -67,6 +72,12 @@ body.edit-mode #main-bar {
 }
 
 #track-time {
+  color: var(--text-color-muted);
+}
+
+/* Bar-mode lyrics — no background of its own, it's a child of #main-bar
+   and inherits that element's background/blur/shadow automatically. */
+#bar-lyric-line {
   color: var(--text-color-muted);
 }
 

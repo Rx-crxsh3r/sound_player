@@ -1,6 +1,6 @@
-const { listen, emit }                        = window.__TAURI__.event;
-const { invoke }                              = window.__TAURI__.tauri;
-const { appWindow, LogicalSize, PhysicalPosition } = window.__TAURI__.window;
+const { listen }                                   = window.__TAURI__.event;
+const { invoke }                                   = window.__TAURI__.tauri;
+const { appWindow, LogicalSize, PhysicalPosition }  = window.__TAURI__.window;
 
 // ── defaults (fallback if backend unreachable) ─────────────
 const DEFAULTS = {
@@ -17,17 +17,20 @@ const DEFAULTS = {
     visualizerSmoothing: 0.20,
     visualizerEnabled:   true,
     visualizerBands:     24,
+    lyricsEnabled:       false,
+    lyricsDisplayMode:   'popup',
 };
 
-const BAR_HEIGHT     = 54;   // must match tauri.conf window height
-const POPUP_HEIGHT   = 208;  // bar + popup together
+const BAR_HEIGHT             = 54;  // must match tauri.conf window height
+const BAR_LYRIC_STRIP_HEIGHT = 30;  // extra height when bar-mode lyrics are visible
+const SYNC_DRIFT_TOLERANCE   = 1.5; // seconds — see updateMedia()
 
 // ── helpers ────────────────────────────────────────────────
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 function formatTime(seconds) {
     const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+    const s = Math.floor(seconds) % 60;
     return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -38,7 +41,6 @@ function setTheme(name) {
 
 // ── state ──────────────────────────────────────────────────
 let settings       = { ...DEFAULTS };
-let popupOpen      = false;
 let mediaState     = { status: 'idle', currentTime: 0, totalTime: 0 };
 let tickerInterval = null;
 
@@ -53,6 +55,16 @@ let freqFallbackTimer = null;
 
 const RUST_BANDS     = 24;
 const MAX_ANIM_DELAY = 0.60;
+
+// ── bar-mode lyrics state ────────────────────────────────────────
+// Only active when settings.lyricsDisplayMode === 'bar' — shown alongside
+// the visualizer (independent settings, not exclusive). The popup's own
+// richer 5-line lyrics panel lives entirely in js/popup.js, which gates its
+// fetch on the opposite mode so the two windows never both query
+// lrclib.net for the same track.
+let barLyricsLines   = [];
+let barLyricsIndex   = -1;
+let lastBarLyricsKey = '';
 
 function rebuildBars(n) {
     if (!freqLine) return;
@@ -101,28 +113,68 @@ function startFreqLoop() {
     rafId = requestAnimationFrame(freqTick);
 }
 
-// ── local time ticker ────────────────────────────────────
+// ── bar-mode lyrics ──────────────────────────────────────────
+function updateBarLyricsForTime(t) {
+    if (barLyricsLines.length === 0) return;
+    let idx = -1;
+    for (let i = 0; i < barLyricsLines.length; i++) {
+        if (barLyricsLines[i].time <= t) idx = i; else break;
+    }
+    if (idx !== barLyricsIndex) {
+        barLyricsIndex = idx;
+        const lineEl = document.getElementById('bar-lyric-line');
+        if (lineEl) lineEl.textContent = barLyricsLines[idx] ? barLyricsLines[idx].text : '';
+    }
+}
+
+async function hideBarLyrics() {
+    barLyricsLines = [];
+    barLyricsIndex = -1;
+    const bar    = document.getElementById('main-bar');
+    const lineEl = document.getElementById('bar-lyric-line');
+    if (bar)    bar.classList.remove('showing-bar-lyric');
+    if (lineEl) lineEl.textContent = '';
+    await syncBarHeight();
+}
+
+async function fetchBarLyrics(title, artist, durationSecs) {
+    await hideBarLyrics();
+    if (settings.lyricsDisplayMode !== 'bar' || !settings.lyricsEnabled) return;
+
+    try {
+        const res = await invoke('fetch_lyrics', { title, artist, durationSecs });
+        if (res && res.available && res.lines && res.lines.length > 0) {
+            barLyricsLines = res.lines;
+            const bar = document.getElementById('main-bar');
+            if (bar) bar.classList.add('showing-bar-lyric');
+            updateBarLyricsForTime(mediaState.currentTime);
+            await syncBarHeight();
+        }
+    } catch (err) {
+        console.warn('[BAR-LYRICS] fetch_lyrics failed:', err);
+    }
+}
+
+// ── local time ticker (drives #track-time in the bar) ───────
 function stopTicker() {
     if (tickerInterval !== null) { clearInterval(tickerInterval); tickerInterval = null; }
 }
 function startTicker() {
     stopTicker();
-    const timeEl     = document.getElementById('track-time');
-    const progressEl = document.getElementById('progress-bar');
+    const timeEl = document.getElementById('track-time');
     tickerInterval = setInterval(() => {
         if (mediaState.status !== 'playing') return;
         mediaState.currentTime = Math.min(mediaState.currentTime + 1, mediaState.totalTime);
-        if (timeEl)     timeEl.textContent     = `${formatTime(mediaState.currentTime)} / ${formatTime(mediaState.totalTime)}`;
-        if (progressEl) progressEl.style.width = mediaState.totalTime > 0
-            ? `${clamp((mediaState.currentTime / mediaState.totalTime) * 100, 0, 100)}%` : '0%';
+        if (timeEl) timeEl.textContent = `${formatTime(mediaState.currentTime)} / ${formatTime(mediaState.totalTime)}`;
+        updateBarLyricsForTime(mediaState.currentTime);
     }, 1000);
 }
 
 // ── click-through sync ────────────────────────────────────
-// Bar must be interactive when popup is visible OR edit mode is on.
-// Otherwise the window is fully click-through (the overlay state).
+// The popup lives in its own separate window now (js/popup.js) and never
+// affects this window's click-through state — only edit-mode dragging does.
 async function syncClickThrough() {
-    const passThrough = !popupOpen && !settings.editMode;
+    const passThrough = !settings.editMode;
     try {
         await invoke('set_main_click_through', { passThrough });
     } catch (err) {
@@ -130,14 +182,17 @@ async function syncClickThrough() {
     }
 }
 
-// ── window height sync ─────────────────────────────────────
-async function syncWindowHeight() {
+// ── bar window height sync ──────────────────────────────────
+// Only grows for the bar-mode lyrics strip now — the popup resizes itself
+// independently in js/popup.js.
+async function syncBarHeight() {
     try {
-        const w       = (await appWindow.innerSize()).width / (await appWindow.scaleFactor());
-        const targetH = popupOpen ? POPUP_HEIGHT : BAR_HEIGHT;
+        const w = (await appWindow.innerSize()).width / (await appWindow.scaleFactor());
+        const barLyricsVisible = settings.lyricsDisplayMode === 'bar' && barLyricsLines.length > 0;
+        const targetH = BAR_HEIGHT + (barLyricsVisible ? BAR_LYRIC_STRIP_HEIGHT : 0);
         await appWindow.setSize(new LogicalSize(w, targetH));
     } catch (err) {
-        console.warn('[WINDOW] syncWindowHeight failed:', err);
+        console.warn('[WINDOW] syncBarHeight failed:', err);
     }
 }
 
@@ -150,7 +205,6 @@ async function applySettings(s) {
     const root = document.documentElement;
     root.style.setProperty('--bar-active-opacity', String(clamp(settings.activeOpacity, 10, 100) / 100));
     root.style.setProperty('--bar-idle-opacity',   String(clamp(settings.idleOpacity,   10, 100) / 100));
-    root.style.setProperty('--popup-bg-opacity',   String(clamp(settings.activeOpacity, 10, 100) / 100));
     root.style.setProperty('--accent-color', settings.accentColor || DEFAULTS.accentColor);
 
     document.body.classList.toggle('edit-mode', Boolean(settings.editMode));
@@ -159,8 +213,13 @@ async function applySettings(s) {
     const newBandCount = Math.max(1, settings.visualizerBands || 24);
     if (freqLine && newBandCount !== freqBars.length) rebuildBars(newBandCount);
 
-    // Visualizer enable/disable
+    // Visualizer enable/disable — .viz-off actually hides the EQ bars.
+    // Previously disabling only stopped feeding them real audio data, so
+    // they kept looping the default (non-reactive) idle bounce animation
+    // forever instead of disappearing, which read as a broken/changed
+    // visualizer pattern rather than an off one.
     const vizEnabled = settings.visualizerEnabled !== false;
+    document.getElementById('main-bar').classList.toggle('viz-off', !vizEnabled);
     try { await invoke('set_visualizer_enabled', { enabled: vizEnabled }); } catch (_) {}
     if (!vizEnabled && rafId !== null) {
         cancelAnimationFrame(rafId);
@@ -169,6 +228,12 @@ async function applySettings(s) {
             freqLine.classList.remove('live');
             freqBars.forEach(b => { b.style.transform = ''; });
         }
+    }
+
+    // Bar-mode lyrics disabled (or switched to popup mode) — drop them
+    // immediately rather than waiting for the next track change.
+    if ((settings.lyricsDisplayMode !== 'bar' || !settings.lyricsEnabled) && barLyricsLines.length > 0) {
+        await hideBarLyrics();
     }
 
     await syncClickThrough();
@@ -180,87 +245,67 @@ async function applySettings(s) {
             console.warn('[SETTINGS] Failed to set bar position:', err);
         }
     }
-
-    const popup = document.getElementById('popup-box');
-    if (popup) {
-        popup.style.left = `${14 + clamp(settings.offsetX, 0, 80)}px`;
-        popup.style.top  = `${58 + clamp(settings.offsetY, 0, 80)}px`;
-    }
 }
 
-// ── popup visibility ───────────────────────────────────────
-async function setPopup(visible) {
-    popupOpen = visible;
-    const popup = document.getElementById('popup-box');
-    if (popup) popup.classList.toggle('hidden', !popupOpen);
-    await syncWindowHeight();
-    await syncClickThrough();
-    try { await emit('overlay-popup-changed', { open: popupOpen }); } catch (err) {
-        console.warn('[POPUP] emit overlay-popup-changed failed:', err);
-    }
-}
-
-// Sets the album-art background, falling back to the CSS placeholder icon
-// when no art is available (common — many SMTC sources don't expose one).
-function setAlbumArt(el, url) {
-    if (!el) return;
-    if (url) {
-        el.style.backgroundImage = `url("${url}")`;
-        el.classList.add('has-art');
-    } else {
-        el.style.backgroundImage = '';
-        el.classList.remove('has-art');
-    }
-}
-
-// SVG markup for transport play/pause icon
-const SVG_PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="5" width="3" height="14" rx="1"/><rect x="15" y="5" width="3" height="14" rx="1"/></svg>';
-const SVG_PLAY  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>';
-
-// ── media UI update ────────────────────────────────────────
+// ── media UI update (bar-only: idle/playing state, #track-time) ────
+// Album art, title/artist, progress, transport, and the popup's own
+// lyrics panel are handled independently by js/popup.js now.
 function updateMedia(state) {
-    const bar          = document.getElementById('main-bar');
-    const timeEl       = document.getElementById('track-time');
-    const artEl        = document.getElementById('album-art');
-    const titleEl      = document.getElementById('track-title');
-    const artistEl     = document.getElementById('track-artist');
-    const progressEl   = document.getElementById('progress-bar');
-    const ppBtn        = document.getElementById('play-pause-btn');
+    const bar    = document.getElementById('main-bar');
+    const timeEl = document.getElementById('track-time');
 
     if (state.status === 'playing' || state.status === 'paused') {
-        // Sync authoritative time from SMTC (corrects ticker drift)
-        mediaState.status      = state.status;
-        mediaState.currentTime = state.current_time;
-        mediaState.totalTime   = state.total_time;
+        mediaState.status    = state.status;
+        mediaState.totalTime = state.total_time;
+
+        const lyricsKey  = `${state.title}|${state.artist}`;
+        const isNewTrack = lyricsKey !== lastBarLyricsKey;
+
+        // Lyrics timing uses mediaState.currentTime, hard-corrected against
+        // the backend's reported position only when the backend says that
+        // position is freshly-anchored (position_live) AND it disagrees by
+        // more than a beat — or this is a new track. Browser-tab sources in
+        // particular only push real position updates occasionally (worse
+        // once the tab is backgrounded, e.g. because the user tabbed away
+        // to a game — its own reporting timer gets throttled), so the
+        // backend is often extrapolating from an old checkpoint; trusting
+        // that extrapolation more than our own steadily-ticking local clock
+        // is what caused lyrics to drift back out of sync after a while.
+        // The displayed clock below always shows the backend's raw value
+        // regardless, so it's never wrong for long either way.
+        const drift = Math.abs(mediaState.currentTime - state.current_time);
+        if (isNewTrack || (state.position_live && drift > SYNC_DRIFT_TOLERANCE)) {
+            mediaState.currentTime = state.current_time;
+        }
 
         bar.classList.toggle('playing', state.status === 'playing');
         bar.classList.toggle('idle',    state.status === 'paused');
+        timeEl.textContent = `${formatTime(state.current_time)} / ${formatTime(state.total_time)}`;
 
-        timeEl.textContent    = `${formatTime(state.current_time)} / ${formatTime(state.total_time)}`;
-        titleEl.textContent   = state.title;
-        artistEl.textContent  = state.artist;
-        setAlbumArt(artEl, state.album_art_url);
+        // media-update now arrives every second while playing (needed to
+        // keep current_time fresh) — only (re)start the ticker on an actual
+        // playing transition. Restarting it every call would tear down and
+        // rebuild the interval before it ever fires, freezing local time.
+        if (state.status === 'playing') { if (tickerInterval === null) startTicker(); }
+        else { stopTicker(); }
 
-        const pct = state.total_time > 0
-            ? clamp((state.current_time / state.total_time) * 100, 0, 100)
-            : 0;
-        progressEl.style.width = `${pct}%`;
-
-        if (ppBtn) ppBtn.innerHTML = state.status === 'playing' ? SVG_PAUSE : SVG_PLAY;
-
-        if (state.status === 'playing') startTicker(); else stopTicker();
+        // New track — (re)fetch bar-mode lyrics. Status-only changes
+        // (play/pause on the same track) don't trigger a refetch.
+        if (isNewTrack) {
+            lastBarLyricsKey = lyricsKey;
+            fetchBarLyrics(state.title, state.artist, state.total_time);
+        } else {
+            updateBarLyricsForTime(mediaState.currentTime);
+        }
     } else {
         mediaState = { status: 'idle', currentTime: 0, totalTime: 0 };
         stopTicker();
+        lastBarLyricsKey = '';
+        hideBarLyrics();
 
         bar.classList.remove('playing');
         bar.classList.add('idle');
-        timeEl.textContent     = '--:-- / --:--';
-        titleEl.textContent    = 'Track Title';
-        artistEl.textContent   = 'Artist Name';
-        setAlbumArt(artEl, '');
-        progressEl.style.width = '0%';
-        if (ppBtn) ppBtn.innerHTML = SVG_PLAY;
+        timeEl.textContent = '--:-- / --:--';
     }
 }
 
@@ -277,7 +322,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Start in bar-only height, idle state
     const bar = document.getElementById('main-bar');
     bar.classList.add('idle');
-    await setPopup(false);
+    await syncBarHeight();
 
     // ── event listeners ──────────────────────────────────
     // Settings updated from settings window
@@ -285,31 +330,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         await applySettings(e.payload);
     });
 
-    // Toggle popup from bar_button window via Rust broadcast
-    listen('overlay-toggle-popup', async () => {
-        await setPopup(!popupOpen);
-    });
-
-    // Close popup button
-    document.getElementById('close-popup-btn').addEventListener('click', async () => {
-        await setPopup(false);
-    });
-
-    // Transport controls
-    document.getElementById('prev-btn').addEventListener('click', async () => {
-        try { await invoke('media_prev'); } catch (err) { console.warn('[TRANSPORT] media_prev failed:', err); }
-    });
-    document.getElementById('play-pause-btn').addEventListener('click', async () => {
-        try { await invoke('media_play_pause'); } catch (err) { console.warn('[TRANSPORT] media_play_pause failed:', err); }
-    });
-    document.getElementById('next-btn').addEventListener('click', async () => {
-        try { await invoke('media_next'); } catch (err) { console.warn('[TRANSPORT] media_next failed:', err); }
-    });
-
     // Edit-mode dragging
     document.getElementById('main-bar').addEventListener('mousedown', (e) => {
         if (!settings.editMode || e.button !== 0) return;
-        if (e.target.closest('button')) return;
         appWindow.startDragging();
     });
 

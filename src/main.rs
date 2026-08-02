@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -39,6 +40,13 @@ struct MediaState {
     album_art_url: String,
     current_time:  u32,
     total_time:    u32,
+    // False when current_time is extrapolated from a stale timeline
+    // checkpoint (common for browser-tab sources, especially once the tab
+    // is backgrounded and its own position-reporting timer gets throttled)
+    // rather than a genuinely fresh one. The frontend uses this to decide
+    // whether current_time is trustworthy enough to hard-correct its own
+    // local clock against.
+    position_live: bool,
 }
 
 // ── Settings schema ────────────────────────────────────────
@@ -59,6 +67,10 @@ struct OverlaySettings {
     visualizer_smoothing:  f32,
     visualizer_enabled:    bool,
     visualizer_bands:      u8,
+    lyrics_enabled:        bool,
+    // "popup" (default) or "bar" — mutually exclusive with the visualizer,
+    // enforced on the settings UI side.
+    lyrics_display_mode:   String,
 }
 
 impl Default for OverlaySettings {
@@ -77,6 +89,8 @@ impl Default for OverlaySettings {
             visualizer_smoothing:  0.20,
             visualizer_enabled:    true,
             visualizer_bands:      24,
+            lyrics_enabled:        false,
+            lyrics_display_mode:   "popup".into(),
         }
     }
 }
@@ -101,6 +115,163 @@ fn write_settings(handle: &AppHandle, s: &OverlaySettings) -> Result<(), String>
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
+// ── Lyrics (lrclib.net) ─────────────────────────────────────
+// Synced-lyrics lookup, keyed by "title|artist" (lowercased). Misses are
+// cached too, so a track confirmed to have no synced lyrics isn't
+// re-queried every time it's replayed.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+struct LyricsLine {
+    time: f32,
+    text: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+struct LyricsResponse {
+    available: bool,
+    lines: Vec<LyricsLine>,
+}
+
+struct LyricsCache(Mutex<HashMap<String, LyricsResponse>>);
+
+fn lyrics_cache_path(handle: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = tauri::api::path::app_config_dir(&handle.config())
+        .ok_or_else(|| "cannot resolve app config dir".to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("lyrics_cache.json"))
+}
+
+fn load_lyrics_cache(handle: &AppHandle) -> HashMap<String, LyricsResponse> {
+    let Ok(path) = lyrics_cache_path(handle)    else { return HashMap::new(); };
+    let Ok(raw)  = fs::read_to_string(&path)    else { return HashMap::new(); };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+fn save_lyrics_cache(handle: &AppHandle, cache: &HashMap<String, LyricsResponse>) {
+    if let Ok(path) = lyrics_cache_path(handle) {
+        if let Ok(content) = serde_json::to_string(cache) {
+            let _ = fs::write(&path, content);
+        }
+    }
+}
+
+fn lyrics_cache_key(title: &str, artist: &str) -> String {
+    format!("{}|{}", title.trim().to_lowercase(), artist.trim().to_lowercase())
+}
+
+// Percent-encodes a query parameter (byte-oriented, so multi-byte UTF-8
+// characters in track/artist names come through correctly).
+fn url_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => out.push(b as char),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+// Parses LRC-format synced lyrics into (time, text) lines. Skips metadata
+// tags ([ar:...], [ti:...], etc.) — anything whose bracket content isn't a
+// numeric mm:ss.xx timestamp. A line can carry multiple stacked timestamps
+// (e.g. a repeated chorus); each becomes its own entry.
+fn parse_lrc(text: &str) -> Vec<LyricsLine> {
+    let mut lines = Vec::new();
+
+    for raw_line in text.lines() {
+        let mut rest  = raw_line.trim();
+        let mut times = Vec::new();
+
+        while rest.starts_with('[') {
+            let Some(close) = rest.find(']') else { break; };
+            match parse_lrc_timestamp(&rest[1..close]) {
+                Some(t) => {
+                    times.push(t);
+                    rest = &rest[close + 1..];
+                }
+                None => break, // non-timestamp tag — not a lyric line
+            }
+        }
+
+        if times.is_empty() { continue; }
+        let text = rest.trim().to_string();
+        for t in times {
+            lines.push(LyricsLine { time: t, text: text.clone() });
+        }
+    }
+
+    lines.sort_by(|a, b| a.time.partial_cmp(&b.time).unwrap_or(std::cmp::Ordering::Equal));
+    lines
+}
+
+fn parse_lrc_timestamp(tag: &str) -> Option<f32> {
+    // "mm:ss.xx" -> ["mm", "ss", "xx"]
+    let normalized = tag.replacen(':', ".", 1);
+    let parts: Vec<&str> = normalized.splitn(3, '.').collect();
+    if parts.len() < 2 { return None; }
+
+    let minutes: f32 = parts[0].parse().ok()?;
+    let seconds: f32 = parts[1].parse().ok()?;
+    let fraction: f32 = match parts.get(2) {
+        Some(frac) => format!("0.{frac}").parse().ok()?,
+        None => 0.0,
+    };
+    Some(minutes * 60.0 + seconds + fraction)
+}
+
+fn fetch_lyrics_remote(title: &str, artist: &str, duration_secs: u32) -> Result<LyricsResponse, String> {
+    let url = format!(
+        "https://lrclib.net/api/get?track_name={}&artist_name={}&duration={}",
+        url_encode(title), url_encode(artist), duration_secs
+    );
+
+    let response = ureq::get(&url)
+        .timeout(Duration::from_secs(5))
+        .call()
+        .map_err(|e| e.to_string())?;
+
+    let body: serde_json::Value = response.into_json().map_err(|e| e.to_string())?;
+
+    match body.get("syncedLyrics").and_then(|v| v.as_str()) {
+        Some(lrc) if !lrc.trim().is_empty() => Ok(LyricsResponse { available: true, lines: parse_lrc(lrc) }),
+        _ => Ok(LyricsResponse { available: false, lines: Vec::new() }),
+    }
+}
+
+#[tauri::command]
+fn fetch_lyrics(handle: AppHandle, title: String, artist: String, duration_secs: u32) -> Result<LyricsResponse, String> {
+    let key = lyrics_cache_key(&title, &artist);
+
+    if let Some(state) = handle.try_state::<LyricsCache>() {
+        if let Some(cached) = state.0.lock().unwrap().get(&key) {
+            return Ok(cached.clone());
+        }
+    }
+
+    // A failed lookup (network error, no match) is treated the same as
+    // "no synced lyrics" from the frontend's point of view.
+    let result = fetch_lyrics_remote(&title, &artist, duration_secs).unwrap_or_default();
+
+    if let Some(state) = handle.try_state::<LyricsCache>() {
+        let mut map = state.0.lock().unwrap();
+        map.insert(key, result.clone());
+        save_lyrics_cache(&handle, &map);
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+fn clear_lyrics_cache(handle: AppHandle) -> Result<(), String> {
+    if let Some(state) = handle.try_state::<LyricsCache>() {
+        state.0.lock().unwrap().clear();
+    }
+    if let Ok(path) = lyrics_cache_path(&handle) {
+        let _ = fs::remove_file(&path);
+    }
+    Ok(())
+}
+
 // ── Tauri commands ─────────────────────────────────────────
 #[tauri::command]
 fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
@@ -114,9 +285,27 @@ fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result
     Ok(())
 }
 
+// The popup window's own visibility is the source of truth for "is it
+// open" — no separate state to keep in sync.
 #[tauri::command]
 fn toggle_overlay_popup(handle: AppHandle) {
-    let _ = handle.emit_all("overlay-toggle-popup", ());
+    let Some(win) = handle.get_window("popup") else { return; };
+    let now_open = !win.is_visible().unwrap_or(false);
+    if now_open {
+        sync_popup_position(&handle);
+        let _ = win.show();
+    } else {
+        let _ = win.hide();
+    }
+    let _ = handle.emit_all("overlay-popup-changed", serde_json::json!({ "open": now_open }));
+}
+
+#[tauri::command]
+fn close_popup_window(handle: AppHandle) {
+    if let Some(win) = handle.get_window("popup") {
+        let _ = win.hide();
+    }
+    let _ = handle.emit_all("overlay-popup-changed", serde_json::json!({ "open": false }));
 }
 
 #[tauri::command]
@@ -195,6 +384,41 @@ fn sync_button_position(handle: &AppHandle) {
     }
 }
 
+// ── popup window helpers ────────────────────────────────────
+// The popup (art/title/progress/transport) is its own small always-on-top
+// window, exactly like bar_button above — this is what makes it possible
+// for it to be genuinely click-through everywhere except its own tiny
+// rectangle. Before this, the popup lived inside the full-width "main"
+// window, so opening it made set_ignore_cursor_events(false) apply to that
+// entire window — swallowing clicks across the whole bar's width, not just
+// the popup box (a serious problem when this overlay sits on top of a game).
+fn open_popup_window(handle: &AppHandle) {
+    if handle.get_window("popup").is_some() { return; }
+    let _ = WindowBuilder::new(handle, "popup", WindowUrl::App("popup.html".into()))
+        .title("Overlay Popup")
+        .inner_size(290.0, 190.0) // popup.js self-resizes to fit its actual content
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .build();
+}
+
+fn sync_popup_position(handle: &AppHandle) {
+    let (Some(main), Some(popup)) = (handle.get_window("main"), handle.get_window("popup")) else {
+        return;
+    };
+    let settings = read_settings(handle);
+    if let Ok(pos) = main.outer_position() {
+        let x = pos.x + 14 + settings.offset_x as i32;
+        let y = pos.y + 58 + settings.offset_y as i32;
+        let _ = popup.set_position(PhysicalPosition::new(x, y));
+    }
+}
+
 // ── Settings window ────────────────────────────────────────
 fn open_settings_window(handle: &AppHandle) {
     if let Some(win) = handle.get_window("settings") {
@@ -240,6 +464,9 @@ fn main() {
             media_play_pause,
             media_next,
             media_prev,
+            fetch_lyrics,
+            clear_lyrics_cache,
+            close_popup_window,
         ])
         .system_tray(build_tray())
         .on_system_tray_event(|app, event| match event {
@@ -254,6 +481,7 @@ fn main() {
                     if let Some(w) = app.get_window("main")       { let _ = w.show(); }
                     if let Some(w) = app.get_window("bar_button") { let _ = w.show(); }
                     sync_button_position(app);
+                    sync_popup_position(app);
                 }
                 "quit" => {
                     std::process::exit(0);
@@ -267,6 +495,7 @@ fn main() {
             match event.event() {
                 WindowEvent::Moved(_) if label == "main" => {
                     sync_button_position(&event.window().app_handle());
+                    sync_popup_position(&event.window().app_handle());
                 }
                 WindowEvent::Resized(_) if label == "main" => {
                     if let Some(btn) = event.window().app_handle().get_window("bar_button") {
@@ -277,9 +506,9 @@ fn main() {
                     api.prevent_close();
                     let _ = event.window().hide();
                     if label == "main" {
-                        if let Some(btn) = event.window().app_handle().get_window("bar_button") {
-                            let _ = btn.hide();
-                        }
+                        let app = event.window().app_handle();
+                        if let Some(btn) = app.get_window("bar_button") { let _ = btn.hide(); }
+                        if let Some(popup) = app.get_window("popup")   { let _ = popup.hide(); }
                     }
                 }
                 _ => {}
@@ -292,6 +521,9 @@ fn main() {
             let viz_flag = Arc::new(AtomicBool::new(saved.visualizer_enabled));
             app.manage(VisualizerEnabled(viz_flag.clone()));
 
+            let lyrics_cache = load_lyrics_cache(&handle);
+            app.manage(LyricsCache(Mutex::new(lyrics_cache)));
+
             if let Some(main) = app.get_window("main") {
                 if let Ok(Some(monitor)) = main.current_monitor() {
                     let screen_w = monitor.size().width as f64 / monitor.scale_factor();
@@ -303,6 +535,9 @@ fn main() {
 
             open_bar_button_window(&handle);
             sync_button_position(&handle);
+
+            open_popup_window(&handle);
+            sync_popup_position(&handle);
 
             let h = handle.clone();
             tauri::async_runtime::spawn(async move { smtc_loop(h).await; });
@@ -333,9 +568,17 @@ async fn smtc_loop(handle: AppHandle) {
                 } else {
                     cached_art = state.album_art_url.clone();
                 }
-                if state.title != last_title || state.status != last_status {
+                let changed = state.title != last_title || state.status != last_status;
+                if changed {
                     last_title  = state.title.clone();
                     last_status = state.status.clone();
+                }
+                // Re-emit every tick while playing too, not just on change —
+                // otherwise current_time is only ever corrected once (at
+                // track/status change) and the frontend's local 1s ticker
+                // drifts against real playback over the length of a song
+                // (this is what caused lyrics to fall out of sync).
+                if changed || state.status == "playing" {
                     let _ = handle.emit_all("media-update", &state);
                 }
             }
@@ -351,12 +594,23 @@ async fn smtc_loop(handle: AppHandle) {
                         album_art_url: String::new(),
                         current_time:  0,
                         total_time:    0,
+                        position_live: false,
                     });
                 }
             }
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
+}
+
+// Windows FILETIME / WinRT DateTime epoch is 1601-01-01, in 100ns ticks.
+// Unix epoch (1970-01-01) is this many seconds after that.
+const WINDOWS_EPOCH_OFFSET_100NS: i64 = 11_644_473_600 * 10_000_000;
+
+fn windows_now_ticks() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    (dur.as_nanos() / 100) as i64 + WINDOWS_EPOCH_OFFSET_100NS
 }
 
 fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
@@ -375,14 +629,47 @@ fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
     let title  = props.Title() .unwrap_or_default().to_string();
     let artist = props.Artist().unwrap_or_default().to_string();
 
-    let (current_time, total_time) = session
+    // A checkpoint older than this isn't trusted enough to hard-correct the
+    // frontend's own clock against — see position_live below.
+    const STALE_THRESHOLD_TICKS: i64 = 5 * 10_000_000; // 5 seconds
+
+    let (current_time, total_time, position_live) = session
         .GetTimelineProperties()
         .map(|tl| {
-            let pos = tl.Position().unwrap_or_default();
-            let end = tl.EndTime().unwrap_or_default();
-            ((pos.Duration / 10_000_000) as u32, (end.Duration / 10_000_000) as u32)
+            let pos_ticks = tl.Position().unwrap_or_default().Duration;
+            let end_ticks = tl.EndTime().unwrap_or_default().Duration;
+            let last_updated = tl.LastUpdatedTime().map(|d| d.UniversalTime).unwrap_or(0);
+            let age_ticks = if last_updated > 0 { (windows_now_ticks() - last_updated).max(0) } else { i64::MAX };
+
+            // Position is a checkpoint, not a live clock — most sources only
+            // push timeline updates occasionally, not every second (browser
+            // tabs are the worst offenders: they only report a position
+            // when the site's own JS calls it, and that reporting itself
+            // gets throttled once the tab is backgrounded — e.g. because
+            // the user tabbed away to a game). While playing, interpolate
+            // forward from the last checkpoint so the value we report
+            // actually advances every poll instead of sitting frozen.
+            let live_ticks = if status == "playing" && last_updated > 0 {
+                pos_ticks + age_ticks
+            } else {
+                pos_ticks
+            };
+            let live_ticks = live_ticks.clamp(0, end_ticks.max(0));
+
+            // Only "live" when the checkpoint we extrapolated from is
+            // recent — the longer we extrapolate from a stale one, the
+            // more room there is for real playback (buffering hiccups,
+            // throttled background-tab timing, etc.) to diverge from our
+            // straight-line guess.
+            let position_live = status == "playing" && age_ticks < STALE_THRESHOLD_TICKS;
+
+            (
+                (live_ticks / 10_000_000) as u32,
+                (end_ticks / 10_000_000) as u32,
+                position_live,
+            )
         })
-        .unwrap_or((0, 0));
+        .unwrap_or((0, 0, false));
 
     // Only decode the thumbnail stream when the track changes (avoids ~100-300 KB/s of allocations).
     let album_art_url = if title != last_title {
@@ -391,7 +678,7 @@ fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
         String::new() // caller restores the cached value
     };
 
-    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time })
+    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live })
 }
 
 // ── Audio frequency capture ───────────────────────────────

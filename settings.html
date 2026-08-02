@@ -15,6 +15,7 @@
       <div id="app-brand">Sound Overlay</div>
       <button class="nav-tab active" data-tab="appearance"  type="button">Appearance</button>
       <button class="nav-tab"        data-tab="position"    type="button">Position &amp; Edit</button>
+      <button class="nav-tab"        data-tab="lyrics"      type="button">Lyrics</button>
       <button class="nav-tab placeholder" data-tab="media"  type="button">Media Source</button>
     </aside>
 
@@ -125,6 +126,54 @@
                 <label for="offset-y">Vertical Offset</label>
                 <input type="range" id="offset-y" class="control-range" min="0" max="80" value="0" />
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Lyrics ──────────────────────────────────── -->
+      <section id="view-lyrics" class="settings-tab-view">
+        <h1>Lyrics</h1>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <div class="switch-row">
+              <label for="lyrics-enabled-toggle">Enable Synced Lyrics</label>
+              <input type="checkbox" id="lyrics-enabled-toggle" class="toggle-checkbox" />
+            </div>
+            <p class="helper-text">
+              Looks up time-synced lyrics for the current track by title and
+              artist using <strong>lrclib.net</strong>, a free, open lyrics
+              database. This is the only feature in the app that uses the
+              network. Lyrics only appear when a synced version exists for
+              the track — unsynced-only matches are skipped.
+            </p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <label for="lyrics-display-mode">Display</label>
+            <select id="lyrics-display-mode" class="control-select">
+              <option value="popup">Popup (below the bar)</option>
+              <option value="bar">In the Bar (under the visualizer)</option>
+            </select>
+            <p class="helper-text">
+              "In the Bar" shows just the current line directly under the
+              frequency visualizer, for a glance without opening the popup.
+              It works alongside the visualizer — turning one on doesn't
+              affect the other.
+            </p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <h2>Cache</h2>
+            <p class="helper-text">Fetched lyrics are cached on disk so replaying a track doesn't re-query the network.</p>
+            <div class="actions-row" style="border-top:none;padding-top:0">
+              <span id="lyrics-cache-status" aria-live="polite"></span>
+              <button id="clear-lyrics-cache-btn" class="btn-ghost" type="button">Clear Lyrics Cache</button>
             </div>
           </div>
         </div>

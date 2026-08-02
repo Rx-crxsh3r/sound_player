@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Overlay Popup</title>
+  <link rel="stylesheet" href="css/popup.css" />
+  <link id="theme-template" rel="stylesheet" href="css/templates/dark.css" />
+</head>
+<body>
+
+  <div id="popup-box">
+    <div class="popup-top-row">
+      <div id="album-art" role="img" aria-label="Album art"></div>
+      <div class="info-wrapper">
+        <div id="track-info">
+          <p id="track-title">Track Title</p>
+          <p id="track-artist">Artist Name</p>
+        </div>
+        <div class="progress-bar-container">
+          <div id="progress-bar"></div>
+        </div>
+        <div id="transport-controls">
+          <button class="transport-btn" id="prev-btn" type="button" title="Previous">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" y1="5" x2="21" y2="19"/><polyline points="17,5 10,12 17,19"/><polyline points="11,5 4,12 11,19"/></svg>
+          </button>
+          <button class="transport-btn" id="play-pause-btn" type="button" title="Play/Pause">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="5" width="3" height="14" rx="1"/><rect x="15" y="5" width="3" height="14" rx="1"/></svg>
+          </button>
+          <button class="transport-btn" id="next-btn" type="button" title="Next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="5" x2="3" y2="19"/><polyline points="7,5 14,12 7,19"/><polyline points="13,5 20,12 13,19"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Fixed 5-line window: current line centered, 2 before/2 after.
+         Lines are created once here and only have textContent swapped —
+         no scrolling, no DOM churn, kept cheap for game-overlay use.
+         Only shown when Settings > Lyrics > Display is "Popup". -->
+    <div id="lyrics-panel" class="hidden">
+      <p class="lyrics-line"></p>
+      <p class="lyrics-line"></p>
+      <p class="lyrics-line current"></p>
+      <p class="lyrics-line"></p>
+      <p class="lyrics-line"></p>
+    </div>
+    <button id="close-popup-btn" type="button" aria-label="Close">&#x2715;</button>
+  </div>
+
+  <script src="js/popup.js"></script>
+</body>
+</html>
