@@ -14,6 +14,7 @@ const DEFAULTS = {
     visualizerGain:      1.0,
     visualizerSmoothing: 0.20,
     visualizerEnabled:   true,
+    visualizerBands:     24,
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
@@ -60,6 +61,7 @@ function populateUI(s) {
     document.getElementById('accent-hex-label').textContent     = `${s.accentColor}`;
 
     document.getElementById('visualizer-enabled').checked          = s.visualizerEnabled !== false;
+    document.getElementById('visualizer-bands').value              = String(s.visualizerBands || 24);
     document.getElementById('visualizer-gain').value              = String(s.visualizerGain);
     document.getElementById('visualizer-smoothing').value         = String(s.visualizerSmoothing);
     document.getElementById('visualizer-gain-value').textContent      = `${Number(s.visualizerGain).toFixed(1)}×`;
@@ -81,6 +83,7 @@ function readUI() {
         offsetX:             clamp(Number(document.getElementById('offset-x').value), 0, 80),
         offsetY:             clamp(Number(document.getElementById('offset-y').value), 0, 80),
         visualizerEnabled:   document.getElementById('visualizer-enabled').checked,
+        visualizerBands:     Number(document.getElementById('visualizer-bands').value),
         visualizerGain:      parseFloat(document.getElementById('visualizer-gain').value),
         visualizerSmoothing: parseFloat(document.getElementById('visualizer-smoothing').value),
     };
@@ -130,7 +133,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     ['theme-select', 'active-opacity', 'idle-opacity',
      'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y',
-     'visualizer-enabled', 'visualizer-gain', 'visualizer-smoothing']
+     'visualizer-enabled', 'visualizer-bands', 'visualizer-gain', 'visualizer-smoothing']
         .forEach(id => document.getElementById(id).addEventListener('input', liveUpdate));
 
     document.getElementById('reset-btn').addEventListener('click', () => {

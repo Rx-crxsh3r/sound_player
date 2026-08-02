@@ -58,6 +58,7 @@ struct OverlaySettings {
     visualizer_gain:      f32,
     visualizer_smoothing:  f32,
     visualizer_enabled:    bool,
+    visualizer_bands:      u8,
 }
 
 impl Default for OverlaySettings {
@@ -75,6 +76,7 @@ impl Default for OverlaySettings {
             visualizer_gain:      1.0,
             visualizer_smoothing:  0.20,
             visualizer_enabled:    true,
+            visualizer_bands:      24,
         }
     }
 }
@@ -453,13 +455,14 @@ fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
     loop {
         std::thread::sleep(Duration::from_millis(33));
 
+        if !enabled.load(Ordering::Relaxed) { continue; }
+
         let window: Vec<f32> = {
             let buf = ring.lock().unwrap();
             if buf.len() < FFT_SIZE { continue; }
             buf[buf.len() - FFT_SIZE..].to_vec()
         };
 
-        if !enabled.load(Ordering::Relaxed) { continue; }
         let bands = compute_bands(&window, sample_rate, &mut planner, GAIN);
         let _ = handle.emit_all("audio-freq", &bands);
     }

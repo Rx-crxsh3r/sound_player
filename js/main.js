@@ -16,6 +16,7 @@ const DEFAULTS = {
     visualizerGain:      1.0,
     visualizerSmoothing: 0.20,
     visualizerEnabled:   true,
+    visualizerBands:     24,
 };
 
 const BAR_HEIGHT     = 54;   // must match tauri.conf window height
@@ -40,6 +41,65 @@ let settings       = { ...DEFAULTS };
 let popupOpen      = false;
 let mediaState     = { status: 'idle', currentTime: 0, totalTime: 0 };
 let tickerInterval = null;
+
+// ── visualizer state (module scope so applySettings can access) ────
+let freqLine          = null;
+let freqBars          = [];
+let barCurrent        = new Float32Array(0);
+let barTarget         = new Float32Array(0);
+let rafId             = null;
+let freqActive        = false;
+let freqFallbackTimer = null;
+
+const RUST_BANDS     = 24;
+const MAX_ANIM_DELAY = 0.60;
+
+function rebuildBars(n) {
+    if (!freqLine) return;
+    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+    clearTimeout(freqFallbackTimer);
+    freqActive = false;
+    freqLine.classList.remove('live');
+    freqLine.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        const pos   = n > 1 ? i / (n - 1) : 0.5;
+        const dist  = Math.abs(pos - 0.5) * 2;
+        bar.style.animationDelay = `${((1 - dist) * MAX_ANIM_DELAY).toFixed(2)}s`;
+        freqLine.appendChild(bar);
+    }
+    freqBars   = [...freqLine.children];
+    barCurrent = new Float32Array(n).fill(0.08);
+    barTarget  = new Float32Array(n).fill(0.08);
+}
+
+function freqTick() {
+    const smooth   = settings.visualizerSmoothing ?? 0.20;
+    const gain     = settings.visualizerGain      ?? 1.0;
+    const lerpRate = 1 - smooth;
+    let   settled  = true;
+
+    for (let i = 0; i < freqBars.length; i++) {
+        const t = Math.min(1.0, Math.max(0.08, barTarget[i] * gain));
+        barCurrent[i] += (t - barCurrent[i]) * lerpRate;
+        if (freqBars[i]) freqBars[i].style.transform = `scaleY(${barCurrent[i].toFixed(3)})`;
+        if (Math.abs(t - barCurrent[i]) > 0.004) settled = false;
+    }
+
+    if (settled && !freqActive) {
+        rafId = null;
+        freqLine.classList.remove('live');
+        freqBars.forEach(b => { b.style.transform = ''; });
+    } else {
+        rafId = requestAnimationFrame(freqTick);
+    }
+}
+
+function startFreqLoop() {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(freqTick);
+}
 
 // ── local time ticker ────────────────────────────────────
 function stopTicker() {
@@ -95,6 +155,10 @@ async function applySettings(s) {
 
     document.body.classList.toggle('edit-mode', Boolean(settings.editMode));
 
+    // Rebuild bars if band count changed
+    const newBandCount = Math.max(1, settings.visualizerBands || 24);
+    if (freqLine && newBandCount !== freqBars.length) rebuildBars(newBandCount);
+
     // Visualizer enable/disable
     const vizEnabled = settings.visualizerEnabled !== false;
     try { await invoke('set_visualizer_enabled', { enabled: vizEnabled }); } catch (_) {}
@@ -136,6 +200,19 @@ async function setPopup(visible) {
     }
 }
 
+// Sets the album-art background, falling back to the CSS placeholder icon
+// when no art is available (common — many SMTC sources don't expose one).
+function setAlbumArt(el, url) {
+    if (!el) return;
+    if (url) {
+        el.style.backgroundImage = `url("${url}")`;
+        el.classList.add('has-art');
+    } else {
+        el.style.backgroundImage = '';
+        el.classList.remove('has-art');
+    }
+}
+
 // SVG markup for transport play/pause icon
 const SVG_PAUSE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="5" width="3" height="14" rx="1"/><rect x="15" y="5" width="3" height="14" rx="1"/></svg>';
 const SVG_PLAY  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6,4 20,12 6,20"/></svg>';
@@ -162,7 +239,7 @@ function updateMedia(state) {
         timeEl.textContent    = `${formatTime(state.current_time)} / ${formatTime(state.total_time)}`;
         titleEl.textContent   = state.title;
         artistEl.textContent  = state.artist;
-        artEl.src             = state.album_art_url || '';
+        setAlbumArt(artEl, state.album_art_url);
 
         const pct = state.total_time > 0
             ? clamp((state.current_time / state.total_time) * 100, 0, 100)
@@ -181,7 +258,7 @@ function updateMedia(state) {
         timeEl.textContent     = '--:-- / --:--';
         titleEl.textContent    = 'Track Title';
         artistEl.textContent   = 'Artist Name';
-        artEl.src              = '';
+        setAlbumArt(artEl, '');
         progressEl.style.width = '0%';
         if (ppBtn) ppBtn.innerHTML = SVG_PLAY;
     }
@@ -239,48 +316,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     listen('media-update', (e) => { updateMedia(e.payload); });
 
     // ── Audio frequency visualizer ──────────────────────────
-    // Bar elements cached once. barTarget receives raw FFT data; barCurrent
-    // lerps toward it every rAF tick for smooth animation.
-    const freqLine   = document.getElementById('animated-line');
-    const freqBars   = freqLine ? [...freqLine.querySelectorAll('.bar')] : [];
-    const barCurrent = new Float32Array(24).fill(0.08);
-    const barTarget  = new Float32Array(24).fill(0.08);
-    let   rafId             = null;
-    let   freqActive        = false;
-    let   freqFallbackTimer = null;
-
-    function freqTick() {
-        const smooth   = settings.visualizerSmoothing ?? 0.20;
-        const gain     = settings.visualizerGain      ?? 1.0;
-        const lerpRate = 1 - smooth;
-        let   settled  = true;
-
-        for (let i = 0; i < freqBars.length; i++) {
-            const t = Math.min(1.0, Math.max(0.08, barTarget[i] * gain));
-            barCurrent[i] += (t - barCurrent[i]) * lerpRate;
-            if (freqBars[i]) freqBars[i].style.transform = `scaleY(${barCurrent[i].toFixed(3)})`;
-            if (Math.abs(t - barCurrent[i]) > 0.004) settled = false;
-        }
-
-        if (settled && !freqActive) {
-            // All bars settled at idle floor — hand control back to CSS animation.
-            rafId = null;
-            freqLine.classList.remove('live');
-            freqBars.forEach(b => { b.style.transform = ''; });
-        } else {
-            rafId = requestAnimationFrame(freqTick);
-        }
-    }
-
-    function startFreqLoop() {
-        if (rafId !== null) return;
-        rafId = requestAnimationFrame(freqTick);
-    }
+    freqLine = document.getElementById('animated-line');
+    rebuildBars(settings.visualizerBands || 24);
 
     listen('audio-freq', (e) => {
         if (!freqLine || freqBars.length === 0) return;
-        const bands = e.payload; // [f32; 24]
-        bands.forEach((v, i) => { if (i < barTarget.length) barTarget[i] = v; });
+        const n   = freqBars.length;
+        const raw = e.payload; // always RUST_BANDS values from Rust
+
+        // Map RUST_BANDS Rust bands → n display bars by averaging.
+        for (let i = 0; i < n; i++) {
+            const lo = Math.floor(i * RUST_BANDS / n);
+            const hi = Math.min(RUST_BANDS, Math.max(lo + 1, Math.floor((i + 1) * RUST_BANDS / n)));
+            let sum = 0;
+            for (let j = lo; j < hi; j++) sum += raw[j] || 0;
+            barTarget[i] = sum / (hi - lo);
+        }
 
         freqActive = true;
         if (!freqLine.classList.contains('live')) freqLine.classList.add('live');

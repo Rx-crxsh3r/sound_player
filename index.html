@@ -19,32 +19,8 @@
       </div>
 
       <!-- EQ visualizer: absolutely anchored to dip bottom, clipped by bar geometry -->
-      <div id="animated-line" aria-hidden="true">
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-      </div>
+      <!-- Bars are created dynamically by rebuildBars() in main.js -->
+      <div id="animated-line" aria-hidden="true"></div>
 
       <!-- Right slot: track time -->
       <div id="track-time">--:-- / --:--</div>
@@ -52,7 +28,7 @@
 
     <!-- POPUP BOX: shown below-left of bar on toggle -->
     <div id="popup-box" class="hidden">
-      <img id="album-art" src="" alt="Album art" />
+      <div id="album-art" role="img" aria-label="Album art"></div>
       <div class="info-wrapper">
         <div id="track-info">
           <p id="track-title">Track Title</p>
