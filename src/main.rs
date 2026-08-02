@@ -1,52 +1,47 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
+
+mod audio_analysis;
+mod platform;
 
 use std::collections::HashMap;
 use std::fs;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use tauri::{
     AppHandle, CustomMenuItem, Manager, PhysicalPosition,
     SystemTray, SystemTrayEvent, SystemTrayMenu,
     WindowBuilder, WindowEvent, WindowUrl,
 };
-use windows::{
-    Media::Control::{
-        GlobalSystemMediaTransportControlsSessionManager as SmtcManager,
-        GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
-    },
-    Storage::Streams::DataReader,
-};
 
-// ── SMTC transport helper ──────────────────────────────────
-// Returns the current active SMTC session, or an error string.
-fn get_smtc_session(
-) -> Result<windows::Media::Control::GlobalSystemMediaTransportControlsSession, String> {
-    let manager = SmtcManager::RequestAsync()
-        .map_err(|e| e.to_string())?
-        .get()
-        .map_err(|e| e.to_string())?;
-    manager.GetCurrentSession().map_err(|_| "no active SMTC session".to_string())
-}
-
-// ── Media state (mock, emitted to frontend) ────────────────
+// ── Media state (emitted to frontend) ───────────────────────
+// pub(crate) — constructed from src/platform/{windows,linux}.rs.
 #[derive(Clone, serde::Serialize)]
-struct MediaState {
-    status:        String,
-    title:         String,
-    artist:        String,
-    album_art_url: String,
-    current_time:  u32,
-    total_time:    u32,
+pub(crate) struct MediaState {
+    pub(crate) status:        String,
+    pub(crate) title:         String,
+    pub(crate) artist:        String,
+    pub(crate) album_art_url: String,
+    pub(crate) current_time:  u32,
+    pub(crate) total_time:    u32,
     // False when current_time is extrapolated from a stale timeline
     // checkpoint (common for browser-tab sources, especially once the tab
     // is backgrounded and its own position-reporting timer gets throttled)
     // rather than a genuinely fresh one. The frontend uses this to decide
     // whether current_time is trustworthy enough to hard-correct its own
-    // local clock against.
-    position_live: bool,
+    // local clock against. Always true-when-playing on Linux/MPRIS, whose
+    // Position property is specified to be computed fresh on each query.
+    pub(crate) position_live: bool,
+}
+
+// Detects JPEG/PNG from magic bytes — shared by both platforms' album-art
+// handling (Windows' embedded SMTC thumbnail stream, Linux's MPRIS artUrl
+// file/URL).
+pub(crate) fn detect_image_mime(bytes: &[u8]) -> &'static str {
+    if bytes.starts_with(b"\xFF\xD8\xFF")   { "image/jpeg" }
+    else if bytes.starts_with(b"\x89PNG")  { "image/png"  }
+    else                                     { "image/jpeg" }
 }
 
 // ── Settings schema ────────────────────────────────────────
@@ -68,8 +63,8 @@ struct OverlaySettings {
     visualizer_enabled:    bool,
     visualizer_bands:      u8,
     lyrics_enabled:        bool,
-    // "popup" (default) or "bar" — mutually exclusive with the visualizer,
-    // enforced on the settings UI side.
+    // "popup" (default, below the bar) or "bar" (under the visualizer) —
+    // independent of visualizer_enabled, not exclusive with it.
     lyrics_display_mode:   String,
 }
 
@@ -319,7 +314,8 @@ fn set_main_click_through(handle: AppHandle, pass_through: bool) {
 #[derive(serde::Serialize)]
 struct BarPosition { x: i32, y: i32 }
 
-// Shared flag — audio_loop reads this every tick to decide whether to emit.
+// Shared flag — each platform's audio capture loop (src/platform/*) reads
+// this every tick to decide whether to run the FFT and emit.
 struct VisualizerEnabled(Arc<AtomicBool>);
 
 #[tauri::command]
@@ -337,22 +333,21 @@ fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
 }
 
 // ── Transport commands ─────────────────────────────────────
+// Thin wrappers — the real implementation is per-platform (SMTC on
+// Windows, MPRIS on Linux); see src/platform/*.
 #[tauri::command]
 fn media_play_pause() -> Result<(), String> {
-    get_smtc_session()?.TryTogglePlayPauseAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
-    Ok(())
+    platform::media_play_pause()
 }
 
 #[tauri::command]
 fn media_next() -> Result<(), String> {
-    get_smtc_session()?.TrySkipNextAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
-    Ok(())
+    platform::media_next()
 }
 
 #[tauri::command]
 fn media_prev() -> Result<(), String> {
-    get_smtc_session()?.TrySkipPreviousAsync().map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
-    Ok(())
+    platform::media_prev()
 }
 
 // ── bar_button window helpers ──────────────────────────────
@@ -540,10 +535,9 @@ fn main() {
             sync_popup_position(&handle);
 
             let h = handle.clone();
-            tauri::async_runtime::spawn(async move { smtc_loop(h).await; });
+            tauri::async_runtime::spawn(async move { media_loop(h).await; });
 
-            let h2 = handle.clone();
-            std::thread::spawn(move || audio_loop(h2, viz_flag));
+            platform::spawn_audio_capture(handle.clone(), viz_flag);
 
             Ok(())
         })
@@ -551,8 +545,10 @@ fn main() {
         .expect("error running tauri application");
 }
 
-// ── SMTC media watcher ────────────────────────────────────
-async fn smtc_loop(handle: AppHandle) {
+// ── Media watcher ──────────────────────────────────────────
+// Platform-agnostic — poll_media() is SMTC on Windows, MPRIS on Linux
+// (src/platform/*), but the polling/emit shape is identical either way.
+async fn media_loop(handle: AppHandle) {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     let mut last_title  = String::new();
@@ -560,7 +556,7 @@ async fn smtc_loop(handle: AppHandle) {
     let mut cached_art  = String::new();
 
     loop {
-        match poll_smtc(&last_title) {
+        match platform::poll_media(&last_title) {
             Ok(mut state) => {
                 if state.title == last_title {
                     // Same track — reuse cached art (avoids re-reading the thumbnail stream).
@@ -603,226 +599,4 @@ async fn smtc_loop(handle: AppHandle) {
     }
 }
 
-// Windows FILETIME / WinRT DateTime epoch is 1601-01-01, in 100ns ticks.
-// Unix epoch (1970-01-01) is this many seconds after that.
-const WINDOWS_EPOCH_OFFSET_100NS: i64 = 11_644_473_600 * 10_000_000;
-
-fn windows_now_ticks() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let dur = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    (dur.as_nanos() / 100) as i64 + WINDOWS_EPOCH_OFFSET_100NS
-}
-
-fn poll_smtc(last_title: &str) -> Result<MediaState, String> {
-    let session = get_smtc_session()?;
-
-    let playback    = session.GetPlaybackInfo().map_err(|e| e.to_string())?;
-    let status_enum = playback.PlaybackStatus().map_err(|e| e.to_string())?;
-    let status = match status_enum {
-        PlaybackStatus::Playing => "playing",
-        PlaybackStatus::Paused  => "paused",
-        _                        => "idle",
-    }.to_string();
-
-    let props  = session.TryGetMediaPropertiesAsync()
-        .map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
-    let title  = props.Title() .unwrap_or_default().to_string();
-    let artist = props.Artist().unwrap_or_default().to_string();
-
-    // A checkpoint older than this isn't trusted enough to hard-correct the
-    // frontend's own clock against — see position_live below.
-    const STALE_THRESHOLD_TICKS: i64 = 5 * 10_000_000; // 5 seconds
-
-    let (current_time, total_time, position_live) = session
-        .GetTimelineProperties()
-        .map(|tl| {
-            let pos_ticks = tl.Position().unwrap_or_default().Duration;
-            let end_ticks = tl.EndTime().unwrap_or_default().Duration;
-            let last_updated = tl.LastUpdatedTime().map(|d| d.UniversalTime).unwrap_or(0);
-            let age_ticks = if last_updated > 0 { (windows_now_ticks() - last_updated).max(0) } else { i64::MAX };
-
-            // Position is a checkpoint, not a live clock — most sources only
-            // push timeline updates occasionally, not every second (browser
-            // tabs are the worst offenders: they only report a position
-            // when the site's own JS calls it, and that reporting itself
-            // gets throttled once the tab is backgrounded — e.g. because
-            // the user tabbed away to a game). While playing, interpolate
-            // forward from the last checkpoint so the value we report
-            // actually advances every poll instead of sitting frozen.
-            let live_ticks = if status == "playing" && last_updated > 0 {
-                pos_ticks + age_ticks
-            } else {
-                pos_ticks
-            };
-            let live_ticks = live_ticks.clamp(0, end_ticks.max(0));
-
-            // Only "live" when the checkpoint we extrapolated from is
-            // recent — the longer we extrapolate from a stale one, the
-            // more room there is for real playback (buffering hiccups,
-            // throttled background-tab timing, etc.) to diverge from our
-            // straight-line guess.
-            let position_live = status == "playing" && age_ticks < STALE_THRESHOLD_TICKS;
-
-            (
-                (live_ticks / 10_000_000) as u32,
-                (end_ticks / 10_000_000) as u32,
-                position_live,
-            )
-        })
-        .unwrap_or((0, 0, false));
-
-    // Only decode the thumbnail stream when the track changes (avoids ~100-300 KB/s of allocations).
-    let album_art_url = if title != last_title {
-        read_album_art(&props).unwrap_or_default()
-    } else {
-        String::new() // caller restores the cached value
-    };
-
-    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live })
-}
-
-// ── Audio frequency capture ───────────────────────────────
-// Captures WASAPI loopback (system audio output), runs an FFT every ~33 ms,
-// and emits an `audio-freq` event with 8 normalised band values (0.0–1.0).
-// The frontend uses these to drive the EQ bar animation.
-fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-    // Prefer the WASAPI host so we can open the output device as a loopback input.
-    let host = match cpal::host_from_id(cpal::HostId::Wasapi) {
-        Ok(h)  => h,
-        Err(_) => return,
-    };
-    let device = match host.default_output_device() {
-        Some(d) => d,
-        None    => return,
-    };
-    let supported = match device.default_output_config() {
-        Ok(c)  => c,
-        Err(_) => return,
-    };
-
-    let sample_rate = supported.sample_rate().0 as f32;
-    let channels    = supported.channels() as usize;
-    let config      = supported.config();
-
-    const FFT_SIZE: usize = 1024;
-    // Tuning constant — raise if bars are too dim, lower if they clip.
-    const GAIN: f32 = 300.0;
-
-    let ring = Arc::new(Mutex::new(Vec::<f32>::with_capacity(FFT_SIZE * 4)));
-    let ring_w = ring.clone();
-
-    // Build a loopback input stream from the output device.
-    // WASAPI shared mode transparently converts the native format to f32.
-    let stream = device.build_input_stream(
-        &config,
-        move |data: &[f32], _: &cpal::InputCallbackInfo| {
-            let mut buf = ring_w.lock().unwrap();
-            // Mix multi-channel to mono and append.
-            for chunk in data.chunks(channels.max(1)) {
-                let mono = chunk.iter().copied().sum::<f32>() / chunk.len() as f32;
-                buf.push(mono);
-            }
-            // Keep only the most recent samples to bound memory use.
-            if buf.len() > FFT_SIZE * 4 {
-                let drop = buf.len() - FFT_SIZE * 2;
-                buf.drain(..drop);
-            }
-        },
-        |_| {},
-        None,
-    );
-    let stream = match stream { Ok(s) => s, Err(_) => return };
-    if stream.play().is_err() { return; }
-
-    // FftPlanner caches plans — creating it once per thread is fine.
-    let mut planner = rustfft::FftPlanner::<f32>::new();
-
-    loop {
-        std::thread::sleep(Duration::from_millis(33));
-
-        if !enabled.load(Ordering::Relaxed) { continue; }
-
-        let window: Vec<f32> = {
-            let buf = ring.lock().unwrap();
-            if buf.len() < FFT_SIZE { continue; }
-            buf[buf.len() - FFT_SIZE..].to_vec()
-        };
-
-        let bands = compute_bands(&window, sample_rate, &mut planner, GAIN);
-        let _ = handle.emit_all("audio-freq", &bands);
-    }
-}
-
-// Applies a Hann window, runs an FFT of length `samples.len()`, then
-// returns 8 RMS band energies scaled to 0.0–1.0 using `gain`.
-fn compute_bands(
-    samples:  &[f32],
-    sample_rate: f32,
-    planner:  &mut rustfft::FftPlanner<f32>,
-    gain:     f32,
-) -> [f32; 24] {
-    use rustfft::num_complex::Complex;
-
-    let n = samples.len();
-    let pi = std::f32::consts::PI;
-
-    // Hann window → reduces spectral leakage.
-    let mut buf: Vec<Complex<f32>> = samples.iter().enumerate().map(|(i, &s)| {
-        let w = 0.5 * (1.0 - (2.0 * pi * i as f32 / (n - 1) as f32).cos());
-        Complex { re: s * w, im: 0.0 }
-    }).collect();
-
-    planner.plan_fft_forward(n).process(&mut buf);
-
-    let bin_hz  = sample_rate / n as f32;
-    let nyquist = n / 2;
-
-    // 24 logarithmically-spaced bands — one per EQ bar.
-    const EDGES: [f32; 25] = [
-         25.0,  40.0,  60.0,  80.0, 100.0, 125.0, 160.0, 200.0,
-        250.0, 315.0, 400.0, 500.0, 630.0, 800.0, 1_000.0, 1_250.0,
-        1_600.0, 2_000.0, 2_500.0, 3_150.0, 4_000.0, 6_300.0, 10_000.0, 16_000.0, 20_000.0,
-    ];
-
-    let mut out = [0.0f32; 24];
-    for i in 0..24 {
-        let lo = ((EDGES[i]     / bin_hz).round() as usize).clamp(1, nyquist);
-        let hi = ((EDGES[i + 1] / bin_hz).round() as usize).clamp(lo + 1, nyquist + 1);
-        let count = (hi - lo) as f32;
-        // RMS of magnitudes in band
-        let energy = buf[lo..hi].iter().map(|c| c.norm_sqr()).sum::<f32>() / count;
-        out[i] = (energy.sqrt() / n as f32 * gain).clamp(0.0, 1.0);
-    }
-    out
-}
-
-fn read_album_art(
-    props: &windows::Media::Control::GlobalSystemMediaTransportControlsSessionMediaProperties,
-) -> Result<String, String> {
-    let thumb_ref = props.Thumbnail().map_err(|e| e.to_string())?;
-
-    let stream = thumb_ref
-        .OpenReadAsync()
-        .map_err(|e| e.to_string())?
-        .get()
-        .map_err(|e| e.to_string())?;
-
-    let size = stream.Size().map_err(|e| e.to_string())? as u32;
-    if size == 0 { return Err("empty art stream".into()); }
-
-    let reader = DataReader::CreateDataReader(&stream).map_err(|e| e.to_string())?;
-    reader.LoadAsync(size).map_err(|e| e.to_string())?.get().map_err(|e| e.to_string())?;
-
-    let mut buf = vec![0u8; size as usize];
-    reader.ReadBytes(&mut buf).map_err(|e| e.to_string())?;
-
-    // Detect MIME type from magic bytes.
-    let mime = if buf.starts_with(b"\xFF\xD8\xFF") { "image/jpeg" }
-               else if buf.starts_with(b"\x89PNG")  { "image/png"  }
-               else                                   { "image/jpeg" };
-
-    Ok(format!("data:{};base64,{}", mime, B64.encode(&buf)))
-}
 

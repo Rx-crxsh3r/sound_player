@@ -9,15 +9,30 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 base64 = "0.22"
-cpal    = "0.15"
 rustfft = "6"
 ureq    = { version = "2", default-features = false, features = ["tls", "json"] }
+
+# ── Platform-specific: media info + audio capture (src/platform/*) ────────
+# Windows: SMTC (Media_Control) for media info, WASAPI (cpal) for loopback.
+[target.'cfg(target_os = "windows")'.dependencies]
+cpal    = "0.15"
 windows = { version = "0.58", features = [
     "Media_Control",
     "Media_Core",
     "Storage_Streams",
     "Foundation",
 ] }
+
+# Linux: MPRIS (zbus — pure Rust, no libdbus needed) for media info,
+# PulseAudio monitor-source capture (also covers PipeWire's pulse-compat
+# layer) for the visualizer.
+[target.'cfg(target_os = "linux")'.dependencies]
+# Default features (not pinned further — least likely to fight with
+# whatever actually resolves; src/platform/linux.rs only needs the
+# zbus::blocking API, which ships in the base crate).
+zbus = "4"
+libpulse-binding = "2"
+libpulse-simple-binding = "2"
 
 [build-dependencies]
 tauri-build = { version = "1", features = [] }
