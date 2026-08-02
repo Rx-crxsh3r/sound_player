@@ -34,6 +34,77 @@ function applyThemeLink(name) {
     if (link) link.href = `css/templates/${name === 'light' ? 'light' : 'dark'}.css`;
 }
 
+// ── Custom select (native <select> popups render via OS/WebView chrome
+// and ignore our theme CSS entirely — this replaces the open-list part
+// with a fully CSS-themed one while keeping the real <select> as the data
+// store, so readUI/populateUI/liveUpdate all keep working unchanged) ────
+function initFakeSelects() {
+    document.querySelectorAll('select.control-select').forEach(selectEl => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'fake-select';
+        wrapper.innerHTML = `
+            <div class="fake-select-box" tabindex="0">
+                <span class="fake-select-label"></span>
+                <svg class="fake-select-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+            </div>
+            <ul class="fake-select-list" hidden></ul>`;
+
+        const box   = wrapper.querySelector('.fake-select-box');
+        const label = wrapper.querySelector('.fake-select-label');
+        const list  = wrapper.querySelector('.fake-select-list');
+
+        const close = () => { list.hidden = true;  wrapper.classList.remove('open'); };
+        const open  = () => { list.hidden = false; wrapper.classList.add('open'); };
+        const refresh = () => {
+            const selected = selectEl.options[selectEl.selectedIndex];
+            label.textContent = selected ? selected.textContent : '';
+            list.querySelectorAll('li').forEach(li => {
+                li.classList.toggle('selected', li.dataset.value === selectEl.value);
+            });
+        };
+
+        Array.from(selectEl.options).forEach(opt => {
+            const li = document.createElement('li');
+            li.textContent = opt.textContent;
+            li.dataset.value = opt.value;
+            li.addEventListener('click', () => {
+                selectEl.value = opt.value;
+                selectEl.dispatchEvent(new Event('input', { bubbles: true }));
+                refresh();
+                close();
+            });
+            list.appendChild(li);
+        });
+
+        box.addEventListener('click', () => (list.hidden ? open() : close()));
+        box.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); list.hidden ? open() : close(); }
+            else if (e.key === 'Escape') close();
+        });
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) close();
+        });
+
+        // Preserve the existing label-click-focuses-control behavior now
+        // that the real <select> is hidden and can't receive it directly.
+        const assocLabel = document.querySelector(`label[for="${selectEl.id}"]`);
+        if (assocLabel) assocLabel.addEventListener('click', () => box.focus());
+
+        selectEl.insertAdjacentElement('afterend', wrapper);
+        selectEl.classList.add('visually-hidden-select');
+        selectEl.tabIndex = -1;
+
+        refresh();
+        selectEl.__refreshFakeSelect = refresh;
+    });
+}
+
+function refreshFakeSelects() {
+    document.querySelectorAll('select.control-select').forEach(el => {
+        if (typeof el.__refreshFakeSelect === 'function') el.__refreshFakeSelect();
+    });
+}
+
 // ── Tab navigation ─────────────────────────────────────────
 function initTabs() {
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -75,6 +146,8 @@ function populateUI(s) {
     applyThemeLink(s.theme);
     document.documentElement.style.setProperty('--accent-color', s.accentColor);
     document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
+
+    refreshFakeSelects();
 }
 
 // ── Read current UI values into an object ─────────────────
@@ -126,6 +199,7 @@ function setStatus(msg, type = '') {
 // ── Main ───────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     initTabs();
+    initFakeSelects();
 
     let current = { ...DEFAULTS };
     try {

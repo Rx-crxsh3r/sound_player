@@ -154,6 +154,11 @@ label {
 }
 
 /* ── Select ──────────────────────────────────────────────── */
+/* The real <select> stays in the DOM as the data store (readUI/populateUI
+   still just read/write its .value) but is visually hidden — native select
+   popups render via OS/WebView chrome and ignore this page's theme
+   entirely, so .fake-select below replaces the open-list part with
+   something actually themed. See initFakeSelects() in js/settings.js. */
 .control-select {
   width: 100%;
   max-width: 380px;
@@ -165,6 +170,89 @@ label {
   font-size: 0.92rem;
   cursor: pointer;
   appearance: auto;
+}
+
+.visually-hidden-select {
+  display: none;
+}
+
+.fake-select {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+}
+
+.fake-select-box {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--ui-input-border);
+  border-radius: 8px;
+  background: var(--ui-input-bg);
+  color: var(--text-color, #e0e0e0);
+  font-size: 0.92rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  user-select: none;
+}
+
+.fake-select-box:hover {
+  background: var(--ui-hover-bg);
+}
+
+.fake-select.open .fake-select-box {
+  border-color: var(--accent-color, #1DB954);
+}
+
+.fake-select-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+}
+
+.fake-select.open .fake-select-chevron {
+  transform: rotate(180deg);
+}
+
+.fake-select-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--ui-input-border);
+  border-radius: 8px;
+  background: var(--settings-bg-end);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.fake-select-list[hidden] {
+  display: none;
+}
+
+.fake-select-list li {
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.92rem;
+  color: var(--text-color, #e0e0e0);
+  cursor: pointer;
+}
+
+.fake-select-list li:hover {
+  background: var(--ui-hover-bg);
+}
+
+.fake-select-list li.selected {
+  color: var(--accent-color, #1DB954);
 }
 
 /* ── Range slider ────────────────────────────────────────── */
