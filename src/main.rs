@@ -362,6 +362,8 @@ fn open_bar_button_window(handle: &AppHandle) {
         .resizable(false)
         .decorations(false)
         .transparent(true)
+        .shadow(false) // otherwise DWM draws its default drop-shadow/border
+                        // around this tiny borderless window on Windows
         .always_on_top(true)
         .skip_taskbar(true)
         .focused(false)
@@ -394,6 +396,7 @@ fn open_popup_window(handle: &AppHandle) {
         .resizable(false)
         .decorations(false)
         .transparent(true)
+        .shadow(false) // same DWM border issue as bar_button — see there
         .always_on_top(true)
         .skip_taskbar(true)
         .focused(false)
