@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 use windows::{
     Media::Control::{
         GlobalSystemMediaTransportControlsSessionManager as SmtcManager,
@@ -221,6 +221,6 @@ fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
         };
 
         let bands = compute_bands(&window, sample_rate, &mut planner, GAIN);
-        let _ = handle.emit_all("audio-freq", &bands);
+        let _ = handle.emit("audio-freq", &bands);
     }
 }

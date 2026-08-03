@@ -1,0 +1,9 @@
+{
+  "identifier": "settings-capability",
+  "description": "Permissions for the settings window (js/settings.js).",
+  "windows": ["settings"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

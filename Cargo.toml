@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tauri = { version = "1", features = [ "window-all", "shell-open", "system-tray", "app-all"] }
+# v1's allowlist-style features ("window-all", "shell-open", etc.) don't
+# exist in v2 — permissions moved to the capabilities/*.json system instead
+# (see capabilities/). "tray-icon" is the only feature this app still needs
+# from the tauri crate itself (system tray is opt-in in v2, not baked into
+# core); we don't use shell/fs/dialog plugins since all file I/O here is
+# already plain std::fs in our own Rust code.
+tauri = { version = "2", features = ["tray-icon"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
@@ -35,4 +41,4 @@ libpulse-binding = "2"
 libpulse-simple-binding = "2"
 
 [build-dependencies]
-tauri-build = { version = "1", features = [] }
+tauri-build = { version = "2", features = [] }

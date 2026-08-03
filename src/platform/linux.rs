@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 use zbus::blocking::{Connection, Proxy};
 
 use crate::audio_analysis::compute_bands;
@@ -213,6 +213,6 @@ fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
 
         let window = &ring[ring.len() - FFT_SIZE..];
         let bands = compute_bands(window, SAMPLE_RATE as f32, &mut planner, GAIN);
-        let _ = handle.emit_all("audio-freq", &bands);
+        let _ = handle.emit("audio-freq", &bands);
     }
 }

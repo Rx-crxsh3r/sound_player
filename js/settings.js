@@ -1,4 +1,4 @@
-const { invoke } = window.__TAURI__.tauri;
+const { invoke } = window.__TAURI__.core;
 
 // ── Defaults (must match Rust OverlaySettings default) ────
 const DEFAULTS = {

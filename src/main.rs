@@ -9,10 +9,11 @@ use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, CustomMenuItem, Manager, PhysicalPosition,
-    SystemTray, SystemTrayEvent, SystemTrayMenu,
-    WindowBuilder, WindowEvent, WindowUrl,
+    AppHandle, Emitter, Manager, PhysicalPosition,
+    WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
 // ── Media state (emitted to frontend) ───────────────────────
@@ -92,8 +93,7 @@ impl Default for OverlaySettings {
 
 // ── Settings persistence helpers ──────────────────────────
 fn settings_path(handle: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = tauri::api::path::app_config_dir(&handle.config())
-        .ok_or_else(|| "cannot resolve app config dir".to_string())?;
+    let dir = handle.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("settings.json"))
 }
@@ -129,8 +129,7 @@ struct LyricsResponse {
 struct LyricsCache(Mutex<HashMap<String, LyricsResponse>>);
 
 fn lyrics_cache_path(handle: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let dir = tauri::api::path::app_config_dir(&handle.config())
-        .ok_or_else(|| "cannot resolve app config dir".to_string())?;
+    let dir = handle.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("lyrics_cache.json"))
 }
@@ -276,7 +275,7 @@ fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
 #[tauri::command]
 fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result<(), String> {
     write_settings(&handle, &settings)?;
-    let _ = handle.emit_all("overlay-settings-updated", &settings);
+    let _ = handle.emit("overlay-settings-updated", &settings);
     Ok(())
 }
 
@@ -284,7 +283,7 @@ fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result
 // open" — no separate state to keep in sync.
 #[tauri::command]
 fn toggle_overlay_popup(handle: AppHandle) {
-    let Some(win) = handle.get_window("popup") else { return; };
+    let Some(win) = handle.get_webview_window("popup") else { return; };
     let now_open = !win.is_visible().unwrap_or(false);
     if now_open {
         sync_popup_position(&handle);
@@ -292,20 +291,20 @@ fn toggle_overlay_popup(handle: AppHandle) {
     } else {
         let _ = win.hide();
     }
-    let _ = handle.emit_all("overlay-popup-changed", serde_json::json!({ "open": now_open }));
+    let _ = handle.emit("overlay-popup-changed", serde_json::json!({ "open": now_open }));
 }
 
 #[tauri::command]
 fn close_popup_window(handle: AppHandle) {
-    if let Some(win) = handle.get_window("popup") {
+    if let Some(win) = handle.get_webview_window("popup") {
         let _ = win.hide();
     }
-    let _ = handle.emit_all("overlay-popup-changed", serde_json::json!({ "open": false }));
+    let _ = handle.emit("overlay-popup-changed", serde_json::json!({ "open": false }));
 }
 
 #[tauri::command]
 fn set_main_click_through(handle: AppHandle, pass_through: bool) {
-    if let Some(win) = handle.get_window("main") {
+    if let Some(win) = handle.get_webview_window("main") {
         let _ = win.set_ignore_cursor_events(pass_through);
     }
 }
@@ -327,7 +326,7 @@ fn set_visualizer_enabled(handle: AppHandle, enabled: bool) {
 
 #[tauri::command]
 fn get_main_position(handle: AppHandle) -> Result<BarPosition, String> {
-    let win = handle.get_window("main").ok_or_else(|| "main window not found".to_string())?;
+    let win = handle.get_webview_window("main").ok_or_else(|| "main window not found".to_string())?;
     let pos = win.outer_position().map_err(|e| e.to_string())?;
     Ok(BarPosition { x: pos.x, y: pos.y })
 }
@@ -356,8 +355,8 @@ fn media_prev() -> Result<(), String> {
 // It stays click-through on the OS level is NOT needed here because
 // the window itself is just 30×30 px — only the button is in it.
 fn open_bar_button_window(handle: &AppHandle) {
-    if handle.get_window("bar_button").is_some() { return; }
-    let _ = WindowBuilder::new(handle, "bar_button", WindowUrl::App("bar_button.html".into()))
+    if handle.get_webview_window("bar_button").is_some() { return; }
+    let _ = WebviewWindowBuilder::new(handle, "bar_button", WebviewUrl::App("bar_button.html".into()))
         .title("Overlay Toggle")
         .inner_size(30.0, 22.0)
         .resizable(false)
@@ -371,7 +370,7 @@ fn open_bar_button_window(handle: &AppHandle) {
 }
 
 fn sync_button_position(handle: &AppHandle) {
-    let (Some(main), Some(btn)) = (handle.get_window("main"), handle.get_window("bar_button")) else {
+    let (Some(main), Some(btn)) = (handle.get_webview_window("main"), handle.get_webview_window("bar_button")) else {
         return;
     };
     if let Ok(pos) = main.outer_position() {
@@ -388,8 +387,8 @@ fn sync_button_position(handle: &AppHandle) {
 // entire window — swallowing clicks across the whole bar's width, not just
 // the popup box (a serious problem when this overlay sits on top of a game).
 fn open_popup_window(handle: &AppHandle) {
-    if handle.get_window("popup").is_some() { return; }
-    let _ = WindowBuilder::new(handle, "popup", WindowUrl::App("popup.html".into()))
+    if handle.get_webview_window("popup").is_some() { return; }
+    let _ = WebviewWindowBuilder::new(handle, "popup", WebviewUrl::App("popup.html".into()))
         .title("Overlay Popup")
         .inner_size(290.0, 190.0) // popup.js self-resizes to fit its actual content
         .resizable(false)
@@ -403,7 +402,7 @@ fn open_popup_window(handle: &AppHandle) {
 }
 
 fn sync_popup_position(handle: &AppHandle) {
-    let (Some(main), Some(popup)) = (handle.get_window("main"), handle.get_window("popup")) else {
+    let (Some(main), Some(popup)) = (handle.get_webview_window("main"), handle.get_webview_window("popup")) else {
         return;
     };
     let settings = read_settings(handle);
@@ -416,12 +415,12 @@ fn sync_popup_position(handle: &AppHandle) {
 
 // ── Settings window ────────────────────────────────────────
 fn open_settings_window(handle: &AppHandle) {
-    if let Some(win) = handle.get_window("settings") {
+    if let Some(win) = handle.get_webview_window("settings") {
         let _ = win.show();
         let _ = win.set_focus();
         return;
     }
-    if let Ok(win) = WindowBuilder::new(handle, "settings", WindowUrl::App("settings.html".into()))
+    if let Ok(win) = WebviewWindowBuilder::new(handle, "settings", WebviewUrl::App("settings.html".into()))
         .title("Sound Overlay Settings")
         .inner_size(860.0, 580.0)
         .min_inner_size(720.0, 480.0)
@@ -435,13 +434,33 @@ fn open_settings_window(handle: &AppHandle) {
 }
 
 // ── System tray ────────────────────────────────────────────
-fn build_tray() -> SystemTray {
-    let menu = SystemTrayMenu::new()
-        .add_item(CustomMenuItem::new("settings",     "Settings"))
-        .add_item(CustomMenuItem::new("show_overlay", "Show Overlay"))
-        .add_native_item(tauri::SystemTrayMenuItem::Separator)
-        .add_item(CustomMenuItem::new("quit",         "Quit"));
-    SystemTray::new().with_menu(menu)
+// Menu/tray-icon building moved to v2's tauri::menu / tauri::tray modules —
+// built inside .setup() below since TrayIconBuilder needs an app handle,
+// unlike v1's SystemTray which was attached directly on the Builder.
+fn build_tray_menu(handle: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let settings     = MenuItem::with_id(handle, "settings",     "Settings",     true, None::<&str>)?;
+    let show_overlay = MenuItem::with_id(handle, "show_overlay", "Show Overlay", true, None::<&str>)?;
+    let separator    = PredefinedMenuItem::separator(handle)?;
+    let quit         = MenuItem::with_id(handle, "quit",         "Quit",         true, None::<&str>)?;
+    Menu::with_items(handle, &[&settings, &show_overlay, &separator, &quit])
+}
+
+fn handle_tray_menu_event(app: &AppHandle, id: &str) {
+    match id {
+        "settings" => {
+            open_settings_window(app);
+        }
+        "show_overlay" => {
+            if let Some(w) = app.get_webview_window("main")       { let _ = w.show(); }
+            if let Some(w) = app.get_webview_window("bar_button") { let _ = w.show(); }
+            sync_button_position(app);
+            sync_popup_position(app);
+        }
+        "quit" => {
+            std::process::exit(0);
+        }
+        _ => {}
+    }
 }
 
 // ── Entry point ────────────────────────────────────────────
@@ -463,47 +482,25 @@ fn main() {
             clear_lyrics_cache,
             close_popup_window,
         ])
-        .system_tray(build_tray())
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::LeftClick { .. } => {
-                open_settings_window(app);
-            }
-            SystemTrayEvent::MenuItemClick { id, .. } => match id.as_str() {
-                "settings" => {
-                    open_settings_window(app);
-                }
-                "show_overlay" => {
-                    if let Some(w) = app.get_window("main")       { let _ = w.show(); }
-                    if let Some(w) = app.get_window("bar_button") { let _ = w.show(); }
-                    sync_button_position(app);
-                    sync_popup_position(app);
-                }
-                "quit" => {
-                    std::process::exit(0);
-                }
-                _ => {}
-            },
-            _ => {}
-        })
-        .on_window_event(|event| {
-            let label = event.window().label();
-            match event.event() {
+        .on_window_event(|window, event| {
+            let label = window.label();
+            match event {
                 WindowEvent::Moved(_) if label == "main" => {
-                    sync_button_position(&event.window().app_handle());
-                    sync_popup_position(&event.window().app_handle());
+                    sync_button_position(window.app_handle());
+                    sync_popup_position(window.app_handle());
                 }
                 WindowEvent::Resized(_) if label == "main" => {
-                    if let Some(btn) = event.window().app_handle().get_window("bar_button") {
+                    if let Some(btn) = window.app_handle().get_webview_window("bar_button") {
                         let _ = btn.set_always_on_top(true);
                     }
                 }
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
-                    let _ = event.window().hide();
+                    let _ = window.hide();
                     if label == "main" {
-                        let app = event.window().app_handle();
-                        if let Some(btn) = app.get_window("bar_button") { let _ = btn.hide(); }
-                        if let Some(popup) = app.get_window("popup")   { let _ = popup.hide(); }
+                        let app = window.app_handle();
+                        if let Some(btn) = app.get_webview_window("bar_button") { let _ = btn.hide(); }
+                        if let Some(popup) = app.get_webview_window("popup")   { let _ = popup.hide(); }
                     }
                 }
                 _ => {}
@@ -519,7 +516,7 @@ fn main() {
             let lyrics_cache = load_lyrics_cache(&handle);
             app.manage(LyricsCache(Mutex::new(lyrics_cache)));
 
-            if let Some(main) = app.get_window("main") {
+            if let Some(main) = app.get_webview_window("main") {
                 if let Ok(Some(monitor)) = main.current_monitor() {
                     let screen_w = monitor.size().width as f64 / monitor.scale_factor();
                     let _ = main.set_size(tauri::LogicalSize::new(screen_w, 54.0));
@@ -533,6 +530,19 @@ fn main() {
 
             open_popup_window(&handle);
             sync_popup_position(&handle);
+
+            let tray_menu = build_tray_menu(&handle)?;
+            TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .menu(&tray_menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| handle_tray_menu_event(app, event.id().as_ref()))
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                        open_settings_window(tray.app_handle());
+                    }
+                })
+                .build(app)?;
 
             let h = handle.clone();
             tauri::async_runtime::spawn(async move { media_loop(h).await; });
@@ -575,7 +585,7 @@ async fn media_loop(handle: AppHandle) {
                 // drifts against real playback over the length of a song
                 // (this is what caused lyrics to fall out of sync).
                 if changed || state.status == "playing" {
-                    let _ = handle.emit_all("media-update", &state);
+                    let _ = handle.emit("media-update", &state);
                 }
             }
             Err(_) => {
@@ -583,7 +593,7 @@ async fn media_loop(handle: AppHandle) {
                     last_status = "idle".into();
                     last_title  = String::new();
                     cached_art  = String::new();
-                    let _ = handle.emit_all("media-update", &MediaState {
+                    let _ = handle.emit("media-update", &MediaState {
                         status:        "idle".into(),
                         title:         String::new(),
                         artist:        String::new(),

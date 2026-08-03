@@ -1,0 +1,10 @@
+{
+  "identifier": "popup-capability",
+  "description": "Permissions for the popup window (art/title/progress/transport/lyrics — js/popup.js).",
+  "windows": ["popup"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-set-size"
+  ]
+}

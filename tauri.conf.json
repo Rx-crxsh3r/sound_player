@@ -1,45 +1,19 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Audio-Overlay",
+  "version": "0.1.0",
+  "identifier": "com.tauri.audio.overlay",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devPath": "dist",
-    "distDir": "dist",
-    "withGlobalTauri": true
+    "frontendDist": "dist"
   },
-  "package": {
-    "productName": "Audio-Overlay",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "window": {
-        "all": true
-      },
-      "app": {
-        "all": true
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.tauri.audio.overlay",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ]
-    },
+  "app": {
+    "withGlobalTauri": true,
     "security": {
       "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:"
     },
-    "systemTray": {
+    "trayIcon": {
       "iconPath": "icons/icon.ico",
       "iconAsTemplate": false
     },
@@ -59,6 +33,17 @@
         "x": 0,
         "y": 0
       }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ]
   }
 }

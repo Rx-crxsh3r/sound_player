@@ -1,6 +1,7 @@
 const { listen }  = window.__TAURI__.event;
-const { invoke }  = window.__TAURI__.tauri;
-const { appWindow, LogicalSize } = window.__TAURI__.window;
+const { invoke }  = window.__TAURI__.core;
+const { getCurrentWindow, LogicalSize } = window.__TAURI__.window;
+const appWindow = getCurrentWindow();
 
 // ── defaults (fallback if backend unreachable) ─────────────
 const DEFAULTS = {

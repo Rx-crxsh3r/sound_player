@@ -1,0 +1,9 @@
+{
+  "identifier": "bar-button-capability",
+  "description": "Permissions for the tiny always-on-top toggle button window (js/bar_button.js).",
+  "windows": ["bar_button"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}
