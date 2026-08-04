@@ -17,11 +17,41 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use gtk::prelude::GtkWindowExt;
 use tauri::{AppHandle, Emitter};
 use zbus::blocking::{Connection, Proxy};
 
 use crate::audio_analysis::compute_bands;
 use crate::{detect_image_mime, MediaState};
+
+// ── Tiling-WM compatibility ─────────────────────────────────
+// i3 (and other tiling WMs) only auto-float windows whose GDK type hint is
+// Dialog/Utility/Toolbar/Splash — anything else gets tiled into the layout
+// like a regular container, which is why the borderless overlay/bar_button
+// windows (sized and positioned in main.rs assuming the WM leaves them
+// alone) were showing up full-size and misplaced. Setting this hint right
+// after each window is built fixes that without needing any i3 user config.
+pub fn float_window(window: &tauri::WebviewWindow) {
+    if let Ok(gtk_window) = window.gtk_window() {
+        gtk_window.set_type_hint(gtk::gdk::WindowTypeHint::Utility);
+    }
+}
+
+// Without an explicit size_request, an unrealized webkit2gtk WebView falls
+// back to GTK's generic "no natural size known yet" default (200x200) for
+// initial window geometry — far bigger than bar_button's requested 30x22.
+// Nudging the webview widget with its own size_request makes GTK query its
+// *actual* natural size instead, which floors at webkit2gtk's own internal
+// minimum (~75x50 as tested on webkit2gtk-4.1 2.52) — still not exactly
+// 30x22 (that floor isn't client-overridable), but a small on-screen corner
+// widget rather than the much larger fallback.
+pub fn pin_window_size(window: &tauri::WebviewWindow, width: i32, height: i32) {
+    use gtk::prelude::WidgetExt;
+    let webview: &tauri::Webview<tauri::Wry> = window.as_ref();
+    let _ = webview.with_webview(move |platform_webview| {
+        platform_webview.inner().set_size_request(width, height);
+    });
+}
 
 const MPRIS_PATH:          &str = "/org/mpris/MediaPlayer2";
 const MPRIS_PLAYER_IFACE:  &str = "org.mpris.MediaPlayer2.Player";

@@ -39,6 +39,10 @@ windows = { version = "0.58", features = [
 zbus = "4"
 libpulse-binding = "2"
 libpulse-simple-binding = "2"
+# Only for float_window()'s GDK window-type-hint call (see platform/linux.rs) —
+# same 0.18 gtk/gdk already pulled in transitively by tauri's wry/webkit2gtk
+# backend, so this adds no new build weight.
+gtk = "0.18"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

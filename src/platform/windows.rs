@@ -224,3 +224,11 @@ fn audio_loop(handle: AppHandle, enabled: Arc<AtomicBool>) {
         let _ = handle.emit("audio-freq", &bands);
     }
 }
+
+// No-op here — Windows' compositor leaves borderless windows exactly where
+// and how big they're set, unlike i3/tiling WMs (see platform/linux.rs).
+pub fn float_window(_window: &tauri::WebviewWindow) {}
+
+// No-op here — only webkit2gtk enforces a webview minimum size floor that
+// fights tiny requested windows (see platform/linux.rs).
+pub fn pin_window_size(_window: &tauri::WebviewWindow, _width: i32, _height: i32) {}

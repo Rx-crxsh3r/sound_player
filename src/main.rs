@@ -356,7 +356,7 @@ fn media_prev() -> Result<(), String> {
 // the window itself is just 30×30 px — only the button is in it.
 fn open_bar_button_window(handle: &AppHandle) {
     if handle.get_webview_window("bar_button").is_some() { return; }
-    let _ = WebviewWindowBuilder::new(handle, "bar_button", WebviewUrl::App("bar_button.html".into()))
+    let Ok(win) = WebviewWindowBuilder::new(handle, "bar_button", WebviewUrl::App("bar_button.html".into()))
         .title("Overlay Toggle")
         .inner_size(30.0, 22.0)
         .resizable(false)
@@ -367,8 +367,12 @@ fn open_bar_button_window(handle: &AppHandle) {
         .always_on_top(true)
         .skip_taskbar(true)
         .focused(false)
-        .visible(true)
-        .build();
+        .visible(false)
+        .build()
+    else { return };
+    platform::float_window(&win);
+    let _ = win.show();
+    platform::pin_window_size(&win, 30, 22);
 }
 
 fn sync_button_position(handle: &AppHandle) {
@@ -390,7 +394,7 @@ fn sync_button_position(handle: &AppHandle) {
 // the popup box (a serious problem when this overlay sits on top of a game).
 fn open_popup_window(handle: &AppHandle) {
     if handle.get_webview_window("popup").is_some() { return; }
-    let _ = WebviewWindowBuilder::new(handle, "popup", WebviewUrl::App("popup.html".into()))
+    let Ok(win) = WebviewWindowBuilder::new(handle, "popup", WebviewUrl::App("popup.html".into()))
         .title("Overlay Popup")
         .inner_size(290.0, 190.0) // popup.js self-resizes to fit its actual content
         .resizable(false)
@@ -401,7 +405,9 @@ fn open_popup_window(handle: &AppHandle) {
         .skip_taskbar(true)
         .focused(false)
         .visible(false)
-        .build();
+        .build()
+    else { return };
+    platform::float_window(&win);
 }
 
 fn sync_popup_position(handle: &AppHandle) {
@@ -520,6 +526,13 @@ fn main() {
             app.manage(LyricsCache(Mutex::new(lyrics_cache)));
 
             if let Some(main) = app.get_webview_window("main") {
+                // Tiling WMs (i3 etc.) decide float-vs-tile at map time, so the
+                // type hint has to land before the window is ever shown —
+                // hence "visible": false in tauri.conf.json and an explicit
+                // show() here, after the hint, instead of relying on the
+                // config's own initial show.
+                platform::float_window(&main);
+                let _ = main.show(); // realizes the GDK window — set_ignore_cursor_events below needs it to exist
                 if let Ok(Some(monitor)) = main.current_monitor() {
                     let screen_w = monitor.size().width as f64 / monitor.scale_factor();
                     let _ = main.set_size(tauri::LogicalSize::new(screen_w, 54.0));
