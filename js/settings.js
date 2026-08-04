@@ -17,7 +17,26 @@ const DEFAULTS = {
     visualizerBands:     24,
     lyricsEnabled:       false,
     lyricsDisplayMode:   'popup',
+    shortcutPlayPause:        { enabled: false, combo: '' },
+    shortcutNext:              { enabled: false, combo: '' },
+    shortcutPrev:               { enabled: false, combo: '' },
+    shortcutTogglePopup:        { enabled: false, combo: '' },
+    shortcutHideBar:             { enabled: false, combo: '' },
+    shortcutToggleVisualizer:    { enabled: false, combo: '' },
+    shortcutOpenSettings:        { enabled: false, combo: '' },
+    hideBarKeepsLyrics: false,
 };
+
+// Matches the camelCase action IDs used in settings.html's
+// data-action/element-id attributes and the action names src/main.rs
+// returns in the failed-shortcuts list — kept in one place so the two
+// stay in sync.
+const SHORTCUT_ACTIONS = [
+    'playPause', 'next', 'prev', 'togglePopup',
+    'hideBar', 'toggleVisualizer', 'openSettings',
+];
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
@@ -105,6 +124,99 @@ function refreshFakeSelects() {
     });
 }
 
+// ── Keybind recorder ────────────────────────────────────────
+// Click a shortcut's button, press the combo you want, it's captured and
+// displayed immediately — nothing is registered with the OS until Save &
+// Apply (see the save-btn handler, which is also where a "this combo is
+// already in use" conflict can first be discovered — see the Keybinds
+// tab's own helper text for why that can only be known at save time).
+function formatAccelerator(e) {
+    const modifierKeys = ['Control', 'Alt', 'Shift', 'Meta'];
+    if (modifierKeys.includes(e.key)) return null; // still just a modifier — keep listening
+
+    const parts = [];
+    if (e.ctrlKey)  parts.push('Ctrl');
+    if (e.altKey)   parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    if (e.metaKey)  parts.push('Super');
+
+    let key = e.key;
+    if (key === ' ') key = 'Space';
+    else if (key.length === 1) key = key.toUpperCase();
+    parts.push(key);
+
+    return parts.join('+');
+}
+
+function initShortcutRecorders() {
+    document.querySelectorAll('.shortcut-row').forEach(row => {
+        const action = row.dataset.action;
+        const btn = document.getElementById(`shortcut-${action}-combo`);
+        if (!btn) return;
+
+        let recording = false;
+
+        function onKeyDown(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.key === 'Escape') { stopRecording(); return; }
+            const combo = formatAccelerator(e);
+            if (!combo) return;
+            btn.textContent = combo;
+            btn.dataset.combo = combo;
+            btn.classList.add('set');
+            btn.classList.remove('conflict');
+            stopRecording();
+        }
+
+        function stopRecording() {
+            recording = false;
+            btn.classList.remove('recording');
+            document.removeEventListener('keydown', onKeyDown, true);
+        }
+
+        btn.addEventListener('click', () => {
+            if (recording) { stopRecording(); return; }
+            recording = true;
+            btn.textContent = 'Press a key combo… (Esc to cancel)';
+            btn.classList.add('recording');
+            document.addEventListener('keydown', onKeyDown, true);
+        });
+    });
+}
+
+function populateShortcuts(s) {
+    SHORTCUT_ACTIONS.forEach(action => {
+        const binding = s[`shortcut${capitalize(action)}`] || { enabled: false, combo: '' };
+        const btn      = document.getElementById(`shortcut-${action}-combo`);
+        const checkbox = document.getElementById(`shortcut-${action}-enabled`);
+        if (btn) {
+            btn.textContent = binding.combo || 'Click to record';
+            btn.dataset.combo = binding.combo || '';
+            btn.classList.toggle('set', Boolean(binding.combo));
+            btn.classList.remove('conflict');
+        }
+        if (checkbox) checkbox.checked = Boolean(binding.enabled);
+    });
+    const keepLyrics = document.getElementById('hide-bar-keeps-lyrics');
+    if (keepLyrics) keepLyrics.checked = Boolean(s.hideBarKeepsLyrics);
+}
+
+function readShortcuts() {
+    const result = {};
+    SHORTCUT_ACTIONS.forEach(action => {
+        const btn      = document.getElementById(`shortcut-${action}-combo`);
+        const checkbox = document.getElementById(`shortcut-${action}-enabled`);
+        result[`shortcut${capitalize(action)}`] = {
+            combo:   (btn && btn.dataset.combo) || '',
+            enabled: Boolean(checkbox && checkbox.checked),
+        };
+    });
+    const keepLyrics = document.getElementById('hide-bar-keeps-lyrics');
+    result.hideBarKeepsLyrics = Boolean(keepLyrics && keepLyrics.checked);
+    return result;
+}
+
 // ── Tab navigation ─────────────────────────────────────────
 function initTabs() {
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -143,6 +255,8 @@ function populateUI(s) {
     document.getElementById('lyrics-enabled-toggle').checked = Boolean(s.lyricsEnabled);
     document.getElementById('lyrics-display-mode').value     = s.lyricsDisplayMode === 'bar' ? 'bar' : 'popup';
 
+    populateShortcuts(s);
+
     applyThemeLink(s.theme);
     document.documentElement.style.setProperty('--accent-color', s.accentColor);
     document.documentElement.style.setProperty('--ui-accent-surface', hexToRgba(s.accentColor, 0.10));
@@ -166,6 +280,7 @@ function readUI() {
         visualizerSmoothing: parseFloat(document.getElementById('visualizer-smoothing').value),
         lyricsEnabled:       document.getElementById('lyrics-enabled-toggle').checked,
         lyricsDisplayMode:   document.getElementById('lyrics-display-mode').value,
+        ...readShortcuts(),
     };
     return result;
 }
@@ -200,6 +315,7 @@ function setStatus(msg, type = '') {
 document.addEventListener('DOMContentLoaded', async () => {
     initTabs();
     initFakeSelects();
+    initShortcutRecorders();
 
     let current = { ...DEFAULTS };
     try {
@@ -246,12 +362,24 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.warn('[BTN] get_main_position failed, keeping existing barX/barY:', err);
         }
 
+        document.querySelectorAll('.shortcut-recorder').forEach(b => b.classList.remove('conflict'));
+
+        let failedShortcuts = [];
         try {
-            await invoke('save_overlay_settings', { settings: newSettings });
-            setStatus('Saved and applied.', 'success');
+            failedShortcuts = (await invoke('save_overlay_settings', { settings: newSettings })) || [];
         } catch (err) {
             setStatus(`Save failed: ${String(err)}`, 'error');
             return;
+        }
+
+        if (failedShortcuts.length > 0) {
+            failedShortcuts.forEach(action => {
+                const btn = document.getElementById(`shortcut-${action}-combo`);
+                if (btn) btn.classList.add('conflict');
+            });
+            setStatus(`Saved, but ${failedShortcuts.length} shortcut${failedShortcuts.length > 1 ? 's' : ''} couldn't be registered (already in use) — see highlighted row${failedShortcuts.length > 1 ? 's' : ''} in Keybinds.`, 'error');
+        } else {
+            setStatus('Saved and applied.', 'success');
         }
 
         const btn  = document.getElementById('save-btn');

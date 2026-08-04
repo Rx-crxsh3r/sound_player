@@ -174,6 +174,28 @@ html, body {
   display: block;
 }
 
+/* ── Minimized (hide-bar hotkey, "keep lyrics visible" case) ── */
+/* Only ever entered while bar-mode lyrics are already showing (so
+   .showing-bar-lyric is already active and #bar-lyric-line already
+   visible) — this additionally hides everything else and repositions the
+   lyric line to fill the much shorter remaining bar. See
+   toggleBarHidden() in js/main.js. */
+#main-bar.minimized {
+  height: 30px;
+  clip-path: none;
+  border-radius: 8px;
+}
+
+#main-bar.minimized #bar-left,
+#main-bar.minimized #animated-line,
+#main-bar.minimized #track-time {
+  display: none !important;
+}
+
+#main-bar.minimized #bar-lyric-line {
+  top: 0;
+}
+
 /* ── Edit mode ──────────────────────────────────────────── */
 body.edit-mode #main-bar {
   pointer-events: auto;

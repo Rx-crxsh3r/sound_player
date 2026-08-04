@@ -15,6 +15,7 @@ use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition,
     WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 // ── Media state (emitted to frontend) ───────────────────────
 // pub(crate) — constructed from src/platform/{windows,linux}.rs.
@@ -45,6 +46,17 @@ pub(crate) fn detect_image_mime(bytes: &[u8]) -> &'static str {
     else                                     { "image/jpeg" }
 }
 
+// A global keybind. Disabled and unset by default — the user must open
+// Settings > Keybinds, record a combo, and enable it explicitly. `combo` is
+// stored in the accelerator format the global-shortcut plugin expects
+// (e.g. "Ctrl+Alt+P"); "" means "not set yet".
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+struct ShortcutBinding {
+    enabled: bool,
+    combo:   String,
+}
+
 // ── Settings schema ────────────────────────────────────────
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -67,6 +79,18 @@ struct OverlaySettings {
     // "popup" (default, below the bar) or "bar" (under the visualizer) —
     // independent of visualizer_enabled, not exclusive with it.
     lyrics_display_mode:   String,
+    shortcut_play_pause:        ShortcutBinding,
+    shortcut_next:              ShortcutBinding,
+    shortcut_prev:               ShortcutBinding,
+    shortcut_toggle_popup:       ShortcutBinding,
+    shortcut_hide_bar:           ShortcutBinding,
+    shortcut_toggle_visualizer:  ShortcutBinding,
+    shortcut_open_settings:      ShortcutBinding,
+    // When true, and bar-mode lyrics are currently showing a line, the
+    // hide-bar shortcut shrinks the bar down to just that line instead of
+    // hiding the window outright (see frontend "hotkey-hide-bar" handling
+    // in js/main.js — Rust doesn't track lyrics-visible state itself).
+    hide_bar_keeps_lyrics: bool,
 }
 
 impl Default for OverlaySettings {
@@ -87,6 +111,14 @@ impl Default for OverlaySettings {
             visualizer_bands:      24,
             lyrics_enabled:        false,
             lyrics_display_mode:   "popup".into(),
+            shortcut_play_pause:        ShortcutBinding::default(),
+            shortcut_next:              ShortcutBinding::default(),
+            shortcut_prev:               ShortcutBinding::default(),
+            shortcut_toggle_popup:       ShortcutBinding::default(),
+            shortcut_hide_bar:           ShortcutBinding::default(),
+            shortcut_toggle_visualizer:  ShortcutBinding::default(),
+            shortcut_open_settings:      ShortcutBinding::default(),
+            hide_bar_keeps_lyrics: false,
         }
     }
 }
@@ -272,26 +304,128 @@ fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
     read_settings(&handle)
 }
 
+// Returns the action names of any enabled shortcuts that failed to
+// register (e.g. already claimed by another application) — this is the
+// live "is this combo taken" check; there's no way to know in advance.
 #[tauri::command]
-fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result<(), String> {
+fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result<Vec<String>, String> {
     write_settings(&handle, &settings)?;
+    let failed_shortcuts = sync_shortcuts(&handle, &settings);
     let _ = handle.emit("overlay-settings-updated", &settings);
-    Ok(())
+    Ok(failed_shortcuts)
 }
 
 // The popup window's own visibility is the source of truth for "is it
-// open" — no separate state to keep in sync.
-#[tauri::command]
-fn toggle_overlay_popup(handle: AppHandle) {
+// open" — no separate state to keep in sync. Shared by the IPC command
+// below and the "toggle popup" global shortcut handler.
+fn toggle_popup_internal(handle: &AppHandle) {
     let Some(win) = handle.get_webview_window("popup") else { return; };
     let now_open = !win.is_visible().unwrap_or(false);
     if now_open {
-        sync_popup_position(&handle);
+        sync_popup_position(handle);
         let _ = win.show();
     } else {
         let _ = win.hide();
     }
     let _ = handle.emit("overlay-popup-changed", serde_json::json!({ "open": now_open }));
+}
+
+#[tauri::command]
+fn toggle_overlay_popup(handle: AppHandle) {
+    toggle_popup_internal(&handle);
+}
+
+// Hides/shows the main bar + its toggle button together — used by the
+// "hide bar" shortcut's full-hide path (see js/main.js's "hotkey-hide-bar"
+// handling for the other path, which shrinks the bar in place instead of
+// hiding the window). A dedicated command because main.js can't reach
+// across to bar_button itself — same reason WindowEvent::CloseRequested
+// already does this cross-window hide in Rust.
+#[tauri::command]
+fn set_main_visible(handle: AppHandle, visible: bool) {
+    if let Some(win) = handle.get_webview_window("main") {
+        if visible { let _ = win.show(); } else { let _ = win.hide(); }
+    }
+    if let Some(btn) = handle.get_webview_window("bar_button") {
+        if visible { let _ = btn.show(); } else { let _ = btn.hide(); }
+    }
+}
+
+// ── Global keybinds ─────────────────────────────────────────
+// Windows (and every OS) has no "is this combo free?" query — the only way
+// to know is to attempt registration and see whether it fails. This is
+// that attempt: unregisters everything, then re-registers whatever's
+// enabled with a non-empty combo, returning the action names that failed
+// (surfaced by the frontend as "already in use"). Full re-sync rather than
+// diffing — simpler, and this only runs at startup and on user-initiated
+// saves, not a hot path.
+fn sync_shortcuts(handle: &AppHandle, settings: &OverlaySettings) -> Vec<String> {
+    let gs = handle.global_shortcut();
+    let _ = gs.unregister_all();
+
+    // Action names are camelCase to match the frontend's element IDs
+    // directly (shortcut-<action>-combo etc. in settings.html) — these
+    // strings cross the Rust/JS boundary as-is via the failed-shortcuts
+    // list, so there's no snake_case/camelCase conversion needed on either
+    // side.
+    let bindings: [(&str, &ShortcutBinding); 7] = [
+        ("playPause",        &settings.shortcut_play_pause),
+        ("next",             &settings.shortcut_next),
+        ("prev",             &settings.shortcut_prev),
+        ("togglePopup",      &settings.shortcut_toggle_popup),
+        ("hideBar",          &settings.shortcut_hide_bar),
+        ("toggleVisualizer", &settings.shortcut_toggle_visualizer),
+        ("openSettings",     &settings.shortcut_open_settings),
+    ];
+
+    let mut failed = Vec::new();
+    for (action, binding) in bindings {
+        if !binding.enabled || binding.combo.is_empty() { continue; }
+
+        let Ok(shortcut) = binding.combo.parse::<Shortcut>() else {
+            failed.push(action.to_string());
+            continue;
+        };
+
+        let action_owned = action.to_string();
+        let registered = gs.on_shortcut(shortcut, move |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                run_shortcut_action(app, &action_owned);
+            }
+        });
+        if registered.is_err() {
+            failed.push(action.to_string());
+        }
+    }
+
+    failed
+}
+
+fn run_shortcut_action(app: &AppHandle, action: &str) {
+    match action {
+        "playPause" => { let _ = platform::media_play_pause(); }
+        "next"      => { let _ = platform::media_next(); }
+        "prev"      => { let _ = platform::media_prev(); }
+        "togglePopup" => toggle_popup_internal(app),
+        // Rust doesn't know whether bar-mode lyrics are currently showing
+        // (only js/main.js does) — it just notifies the bar window and
+        // lets the frontend decide between shrinking-to-lyrics-line and a
+        // full hide (which then calls set_main_visible back on this side).
+        "hideBar" => {
+            let _ = app.emit("hotkey-hide-bar", ());
+        }
+        "toggleVisualizer" => {
+            let mut settings = read_settings(app);
+            settings.visualizer_enabled = !settings.visualizer_enabled;
+            if let Some(state) = app.try_state::<VisualizerEnabled>() {
+                state.0.store(settings.visualizer_enabled, Ordering::Relaxed);
+            }
+            let _ = write_settings(app, &settings);
+            let _ = app.emit("overlay-settings-updated", &settings);
+        }
+        "openSettings" => open_settings_window(app),
+        _ => {}
+    }
 }
 
 #[tauri::command]
@@ -477,6 +611,7 @@ fn main() {
     eprintln!("[BOOT] ====== Sound Overlay starting ======");
     eprintln!("[BOOT] Registering commands and building app...");
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             load_overlay_settings,
             save_overlay_settings,
@@ -490,6 +625,7 @@ fn main() {
             fetch_lyrics,
             clear_lyrics_cache,
             close_popup_window,
+            set_main_visible,
         ])
         .on_window_event(|window, event| {
             let label = window.label();
@@ -524,6 +660,8 @@ fn main() {
 
             let lyrics_cache = load_lyrics_cache(&handle);
             app.manage(LyricsCache(Mutex::new(lyrics_cache)));
+
+            sync_shortcuts(&handle, &saved);
 
             if let Some(main) = app.get_webview_window("main") {
                 // Tiling WMs (i3 etc.) decide float-vs-tile at map time, so the

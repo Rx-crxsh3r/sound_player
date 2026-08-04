@@ -16,6 +16,7 @@
       <button class="nav-tab active" data-tab="appearance"  type="button">Appearance</button>
       <button class="nav-tab"        data-tab="position"    type="button">Position &amp; Edit</button>
       <button class="nav-tab"        data-tab="lyrics"      type="button">Lyrics</button>
+      <button class="nav-tab"        data-tab="keybinds"    type="button">Keybinds</button>
       <button class="nav-tab placeholder" data-tab="media"  type="button">Media Source</button>
     </aside>
 
@@ -175,6 +176,73 @@
               <span id="lyrics-cache-status" aria-live="polite"></span>
               <button id="clear-lyrics-cache-btn" class="btn-ghost" type="button">Clear Lyrics Cache</button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Keybinds ─────────────────────────────────── -->
+      <section id="view-keybinds" class="settings-tab-view">
+        <h1>Keybinds</h1>
+
+        <div class="settings-card">
+          <p class="helper-text">
+            All keybinds are disabled until you record a combo and enable
+            the row below, then Save &amp; Apply. Saving attempts to
+            register each enabled combo right then — Windows only reports
+            whether a combo is already taken by trying to claim it, so
+            that's when a conflict (shown here as "already in use") would
+            surface, not before. Games that read keys directly rather than
+            through Windows' own hotkey system won't show up as a conflict
+            even if the same key does double duty there — worth picking
+            combos you're not already using in whatever you play.
+          </p>
+        </div>
+
+        <div class="settings-card">
+          <div class="shortcut-row" data-action="playPause">
+            <label for="shortcut-playPause-enabled">Play / Pause</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-playPause-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-playPause-enabled" />
+          </div>
+          <div class="shortcut-row" data-action="next">
+            <label for="shortcut-next-enabled">Next Track</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-next-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-next-enabled" />
+          </div>
+          <div class="shortcut-row" data-action="prev">
+            <label for="shortcut-prev-enabled">Previous Track</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-prev-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-prev-enabled" />
+          </div>
+          <div class="shortcut-row" data-action="togglePopup">
+            <label for="shortcut-togglePopup-enabled">Open / Close Popup</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-togglePopup-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-togglePopup-enabled" />
+          </div>
+          <div class="shortcut-row no-border" data-action="hideBar">
+            <label for="shortcut-hideBar-enabled">Hide Music Bar</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-hideBar-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-hideBar-enabled" />
+          </div>
+          <div class="control-group no-gap" style="padding-left:2px">
+            <div class="switch-row">
+              <label for="hide-bar-keeps-lyrics">Keep showing the current lyric line when hidden</label>
+              <input type="checkbox" class="toggle-checkbox" id="hide-bar-keeps-lyrics" />
+            </div>
+            <p class="helper-text">Only applies when Lyrics &gt; Display is "In the Bar" and a line is currently showing — otherwise this shortcut just hides the bar normally.</p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="shortcut-row" data-action="toggleVisualizer">
+            <label for="shortcut-toggleVisualizer-enabled">Toggle Visualizer</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-toggleVisualizer-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-toggleVisualizer-enabled" />
+          </div>
+          <div class="shortcut-row no-border" data-action="openSettings">
+            <label for="shortcut-openSettings-enabled">Open Settings</label>
+            <button type="button" class="shortcut-recorder" id="shortcut-openSettings-combo">Click to record</button>
+            <input type="checkbox" class="toggle-checkbox" id="shortcut-openSettings-enabled" />
           </div>
         </div>
       </section>

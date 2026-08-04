@@ -17,6 +17,10 @@ tokio = { version = "1", features = ["rt", "macros", "time"] }
 base64 = "0.22"
 rustfft = "6"
 ureq    = { version = "2", default-features = false, features = ["tls", "json"] }
+# Global keybinds (Settings > Keybinds). Wraps RegisterHotKey on Windows,
+# XGrabKey on X11/Linux, Carbon on macOS — cross-platform by itself, so this
+# isn't target-gated even though Windows is the priority right now.
+tauri-plugin-global-shortcut = "2"
 
 # ── Platform-specific: media info + audio capture (src/platform/*) ────────
 # Windows: SMTC (Media_Control) for media info, WASAPI (cpal) for loopback.

@@ -20,6 +20,7 @@ const DEFAULTS = {
     visualizerBands:     24,
     lyricsEnabled:       false,
     lyricsDisplayMode:   'popup',
+    hideBarKeepsLyrics:  false,
 };
 
 const BAR_HEIGHT             = 54;  // must match tauri.conf window height
@@ -66,6 +67,12 @@ const MAX_ANIM_DELAY = 0.60;
 let barLyricsLines   = [];
 let barLyricsIndex   = -1;
 let lastBarLyricsKey = '';
+
+// ── hide-bar hotkey state ──────────────────────────────────
+// null = normal; 'minimized' = shrunk to just the lyric line in place;
+// 'hidden' = whole window hidden via Rust. See toggleBarHidden().
+let barReduced   = null;
+let barMinimized = false; // read by syncBarHeight()
 
 function rebuildBars(n) {
     if (!freqLine) return;
@@ -184,17 +191,62 @@ async function syncClickThrough() {
 }
 
 // ── bar window height sync ──────────────────────────────────
-// Only grows for the bar-mode lyrics strip now — the popup resizes itself
+// Grows for the bar-mode lyrics strip, or shrinks to just that strip when
+// minimized via the hide-bar hotkey — the popup resizes itself
 // independently in js/popup.js.
 async function syncBarHeight() {
     try {
         const w = (await appWindow.innerSize()).width / (await appWindow.scaleFactor());
-        const barLyricsVisible = settings.lyricsDisplayMode === 'bar' && barLyricsLines.length > 0;
-        const targetH = BAR_HEIGHT + (barLyricsVisible ? BAR_LYRIC_STRIP_HEIGHT : 0);
+        let targetH;
+        if (barMinimized) {
+            targetH = BAR_LYRIC_STRIP_HEIGHT;
+        } else {
+            const barLyricsVisible = settings.lyricsDisplayMode === 'bar' && barLyricsLines.length > 0;
+            targetH = BAR_HEIGHT + (barLyricsVisible ? BAR_LYRIC_STRIP_HEIGHT : 0);
+        }
         await appWindow.setSize(new LogicalSize(w, targetH));
     } catch (err) {
         console.warn('[WINDOW] syncBarHeight failed:', err);
     }
+}
+
+// ── hide-bar hotkey ────────────────────────────────────────
+// Rust doesn't know whether bar-mode lyrics are currently showing (only
+// this window does), so its hotkey handler just emits this event and
+// leaves the decision to us: if "keep lyrics visible" is on and a line is
+// actually showing, shrink the bar to just that line in place; otherwise
+// hide the whole window (a Rust round-trip since that also has to hide
+// bar_button, a different window this script can't reach directly).
+async function toggleBarHidden() {
+    if (barReduced === null) {
+        const shouldMinimize = settings.hideBarKeepsLyrics
+            && settings.lyricsDisplayMode === 'bar'
+            && barLyricsLines.length > 0;
+
+        if (shouldMinimize) {
+            barMinimized = true;
+            document.getElementById('main-bar')?.classList.add('minimized');
+            await syncBarHeight();
+            barReduced = 'minimized';
+        } else {
+            try { await invoke('set_main_visible', { visible: false }); } catch (err) {
+                console.warn('[HOTKEY] set_main_visible(false) failed:', err);
+            }
+            barReduced = 'hidden';
+        }
+        return;
+    }
+
+    if (barReduced === 'minimized') {
+        barMinimized = false;
+        document.getElementById('main-bar')?.classList.remove('minimized');
+        await syncBarHeight();
+    } else if (barReduced === 'hidden') {
+        try { await invoke('set_main_visible', { visible: true }); } catch (err) {
+            console.warn('[HOTKEY] set_main_visible(true) failed:', err);
+        }
+    }
+    barReduced = null;
 }
 
 // ── apply settings from any source ────────────────────────
@@ -338,6 +390,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     listen('media-update', (e) => { updateMedia(e.payload); });
+
+    // "Hide Music Bar" global shortcut (Settings > Keybinds) — see
+    // toggleBarHidden() for the minimize-vs-fully-hide decision.
+    listen('hotkey-hide-bar', () => { toggleBarHidden(); });
 
     // ── Audio frequency visualizer ──────────────────────────
     freqLine = document.getElementById('animated-line');

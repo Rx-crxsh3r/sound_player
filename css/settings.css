@@ -255,6 +255,51 @@ label {
   color: var(--accent-color, #1DB954);
 }
 
+/* ── Keybind row ─────────────────────────────────────────── */
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ui-card-border);
+}
+
+.shortcut-row.no-border {
+  border-bottom: none;
+}
+
+.shortcut-row label {
+  flex: 1;
+  margin: 0;
+}
+
+.shortcut-recorder {
+  min-width: 160px;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-input-border);
+  border-radius: 8px;
+  background: var(--ui-input-bg);
+  color: var(--text-color-muted, #a0a0a0);
+  font-size: 0.88rem;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.shortcut-recorder.set {
+  color: var(--text-color, #e0e0e0);
+}
+
+.shortcut-recorder.recording {
+  border-color: var(--accent-color, #1DB954);
+  color: var(--accent-color, #1DB954);
+}
+
+.shortcut-recorder.conflict {
+  border-color: #ff6060;
+  color: #ff6060;
+}
+
 /* ── Range slider ────────────────────────────────────────── */
 .range-row {
   display: flex;
