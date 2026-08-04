@@ -1,0 +1,200 @@
+// Believer — Imagine Dragons
+// Sample .clyr file demonstrating the format's supported features.
+//
+// Word-level timing inside each chorus line is an ESTIMATE (evenly/tastefully
+// spread across that line's real start/end window from the source timestamps)
+// since only phrase-level timing was available, not authoritative per-word data.
+//
+// "Flying"/"falling"/"stairs" are approximated with rapid, statically-positioned
+// word cues (no real motion/animation exists in this version of the format —
+// that's an explicitly deferred future feature, see CLYR_FORMAT.md).
+
+@font: "Inter"
+@size: 32px
+@color: "#FFFFFF"
+@align: center
+
+// ── Verse 1 ──────────────────────────────────────────────
+[00:07.774] -> [00:09.188] First things first
+[00:09.188] -> [00:12.194] I'ma say all the words inside my head
+[00:12.194] -> [00:14.453] I'm fired up and tired of
+[00:14.453] -> [00:18.074] The way that things have been, oh-ooh
+[00:18.074] -> [00:22.885] The way that things have been, oh-ooh
+
+// ── Verse 2 ──────────────────────────────────────────────
+[00:22.885] -> [00:24.701] Second thing second
+[00:24.701] -> [00:27.273] Don't you tell me what you think that I could be
+[00:27.273] -> [00:29.483] I'm the one at the sail
+[00:29.483] -> [00:33.466] I'm the master of my sea, oh-ooh
+[00:33.466] -> [00:38.149] The master of my sea, oh-ooh
+
+// ── Pre-Chorus 1 ─────────────────────────────────────────
+[00:38.149] -> [00:40.073] I was broken from a young age
+[00:40.073] -> [00:41.967] Taking my sulkin' to the masses
+[00:41.967] -> [00:43.733] Writing my poems for the few
+[00:43.733] -> [00:45.780] That look at me, took to me, shook at me, feelin' me
+[00:45.780] -> [00:47.674] Singing from heartache from the pain
+[00:47.674] -> [00:49.516] Taking my message from the veins
+[00:49.516] -> [00:51.438] Speaking my lesson from the brain
+[00:51.438] -> [00:54.695] Seeing the beauty through the...
+
+// ── Chorus 1 (chaos) ─────────────────────────────────────
+[00:54.695] -> [00:55.295] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[00:55.295] -> [00:57.533] { bold: true, pos: "x:15, y:15" } You
+[00:55.445] -> [00:57.533] { bold: true, pos: "x:25, y:23" } made
+[00:55.595] -> [00:57.533] { bold: true, pos: "x:35, y:31" } me
+[00:55.745] -> [00:57.533] { bold: true, pos: "x:45, y:39" } a,
+[00:55.895] -> [00:57.533] { bold: true, pos: "x:55, y:47" } you
+[00:56.045] -> [00:57.533] { bold: true, pos: "x:65, y:55" } made
+[00:56.195] -> [00:57.533] { bold: true, pos: "x:75, y:63" } me
+[00:56.345] -> [00:57.533] { bold: true, pos: "x:85, y:71" } a
+
+[00:57.533] -> [01:02.224] { bold: true, pos: "x:90, y:76" } Believer,
+[00:57.733] -> [01:02.224] { bold: true, pos: "x:95, y:84" } believer
+
+[01:02.224] -> [01:02.824] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[01:02.824] -> [01:05.363] { bold: true, color: "#FFD700", pos: "x:50, y:50" } You break me down and build me up
+
+[01:05.363] -> [01:09.023] { bold: true, color: "#FFD700", pos: "x:50, y:50" } Believer, believer
+
+[01:09.023] -> [01:09.623] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[01:09.623] -> [01:10.123] { italic: true, pos: "x:5, y:40" } Oh,
+[01:09.823] -> [01:10.323] { italic: true, pos: "x:25, y:40" } let
+[01:10.023] -> [01:10.523] { italic: true, pos: "x:45, y:40" } the
+[01:10.223] -> [01:10.723] { italic: true, pos: "x:65, y:40" } bullets
+[01:10.423] -> [01:10.923] { italic: true, color: "#FFD700", size: 44px, pos: "x:90, y:40" } fly,
+[01:11.000] -> [01:14.786] { color: "#ADD8E6", pos: "x:20, y:15" } oh,
+[01:11.600] -> [01:14.786] { color: "#ADD8E6", pos: "x:45, y:40" } let
+[01:12.200] -> [01:14.786] { color: "#ADD8E6", pos: "x:65, y:65" } them
+[01:12.800] -> [01:14.786] { color: "#4682B4", size: 44px, pos: "x:85, y:85" } rain
+
+[01:14.786] -> [01:17.611] My life, my love, my drive, it came from…
+
+[01:17.611] -> [01:18.211] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[01:18.211] -> [01:20.602] { bold: true, pos: "x:15, y:15" } You
+[01:18.361] -> [01:20.602] { bold: true, pos: "x:25, y:23" } made
+[01:18.511] -> [01:20.602] { bold: true, pos: "x:35, y:31" } me
+[01:18.661] -> [01:20.602] { bold: true, pos: "x:45, y:39" } a,
+[01:18.811] -> [01:20.602] { bold: true, pos: "x:55, y:47" } you
+[01:18.961] -> [01:20.602] { bold: true, pos: "x:65, y:55" } made
+[01:19.111] -> [01:20.602] { bold: true, pos: "x:75, y:63" } me
+[01:19.261] -> [01:20.602] { bold: true, pos: "x:85, y:71" } a
+
+[01:20.602] -> [01:26.039] { bold: true, pos: "x:90, y:76" } Believer,
+[01:20.802] -> [01:26.039] { bold: true, pos: "x:95, y:84" } believer
+
+// ── Verse 3 ──────────────────────────────────────────────
+[01:26.039] -> [01:28.947] Send a prayer to the ones up above
+[01:28.947] -> [01:30.777] All the hate that you've heard
+[01:30.777] -> [01:34.868] Has turned your spirit to a dove, oh-ooh
+[01:34.868] -> [01:39.505] Your spirit up above, oh-ooh
+
+// ── Pre-Chorus 2 ─────────────────────────────────────────
+[01:39.505] -> [01:41.362] I was chokin' in the crowd
+[01:41.362] -> [01:43.269] Building my rain up in the cloud
+[01:43.269] -> [01:45.197] Falling like ashes to the ground
+[01:45.197] -> [01:47.368] Hoping my feelings, they would drown
+[01:47.368] -> [01:49.431] But they never did, ever lived, ebbin' and flowin'
+[01:49.431] -> [01:52.574] Inhibited, limited 'til it broke open and rained down
+[01:52.574] -> [01:56.099] It rained down, like…
+
+// ── Chorus 2 (chaos) ─────────────────────────────────────
+[01:56.099] -> [01:56.699] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[01:56.699] -> [01:58.962] { bold: true, pos: "x:15, y:15" } You
+[01:56.849] -> [01:58.962] { bold: true, pos: "x:25, y:23" } made
+[01:56.999] -> [01:58.962] { bold: true, pos: "x:35, y:31" } me
+[01:57.149] -> [01:58.962] { bold: true, pos: "x:45, y:39" } a,
+[01:57.299] -> [01:58.962] { bold: true, pos: "x:55, y:47" } you
+[01:57.449] -> [01:58.962] { bold: true, pos: "x:65, y:55" } made
+[01:57.599] -> [01:58.962] { bold: true, pos: "x:75, y:63" } me
+[01:57.749] -> [01:58.962] { bold: true, pos: "x:85, y:71" } a
+
+[01:58.962] -> [02:03.866] { bold: true, pos: "x:90, y:76" } Believer,
+[01:59.162] -> [02:03.866] { bold: true, pos: "x:95, y:84" } believer
+
+[02:03.866] -> [02:04.466] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[02:04.466] -> [02:06.647] { bold: true, color: "#FFD700", pos: "x:50, y:50" } You break me down and build me up
+
+[02:06.647] -> [02:10.448] { bold: true, color: "#FFD700", pos: "x:50, y:50" } Believer, believer
+
+[02:10.448] -> [02:11.048] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[02:11.048] -> [02:11.548] { italic: true, pos: "x:5, y:40" } Oh,
+[02:11.248] -> [02:11.748] { italic: true, pos: "x:25, y:40" } let
+[02:11.448] -> [02:11.948] { italic: true, pos: "x:45, y:40" } the
+[02:11.648] -> [02:12.148] { italic: true, pos: "x:65, y:40" } bullets
+[02:11.848] -> [02:12.348] { italic: true, color: "#FFD700", size: 44px, pos: "x:90, y:40" } fly,
+[02:12.425] -> [02:16.070] { color: "#ADD8E6", pos: "x:20, y:15" } oh,
+[02:13.025] -> [02:16.070] { color: "#ADD8E6", pos: "x:45, y:40" } let
+[02:13.625] -> [02:16.070] { color: "#ADD8E6", pos: "x:65, y:65" } them
+[02:14.225] -> [02:16.070] { color: "#4682B4", size: 44px, pos: "x:85, y:85" } rain
+
+[02:16.070] -> [02:19.121] My life, my love, my drive, it came from…
+
+[02:19.121] -> [02:19.721] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[02:19.721] -> [02:21.999] { bold: true, pos: "x:15, y:15" } You
+[02:19.871] -> [02:21.999] { bold: true, pos: "x:25, y:23" } made
+[02:20.021] -> [02:21.999] { bold: true, pos: "x:35, y:31" } me
+[02:20.171] -> [02:21.999] { bold: true, pos: "x:45, y:39" } a,
+[02:20.321] -> [02:21.999] { bold: true, pos: "x:55, y:47" } you
+[02:20.471] -> [02:21.999] { bold: true, pos: "x:65, y:55" } made
+[02:20.621] -> [02:21.999] { bold: true, pos: "x:75, y:63" } me
+[02:20.771] -> [02:21.999] { bold: true, pos: "x:85, y:71" } a
+
+[02:21.999] -> [02:27.473] { bold: true, pos: "x:90, y:76" } Believer,
+[02:22.199] -> [02:27.473] { bold: true, pos: "x:95, y:84" } believer
+
+// ── Verse 4 ──────────────────────────────────────────────
+[02:27.473] -> [02:30.324] By the grace of the fire and the flames
+[02:30.324] -> [02:32.539] You're the face of the future
+[02:32.539] -> [02:36.253] The blood in my veins, oh-ooh
+[02:36.253] -> [02:40.996] The blood in my veins, oh-ooh
+
+// ── Pre-Chorus 3 ─────────────────────────────────────────
+[02:40.996] -> [02:43.235] But they never did, ever lived, ebbin' and flowin'
+[02:43.235] -> [02:46.288] Inhibited, limited 'til it broke open and rained down
+[02:46.288] -> [02:49.963] It rained down, like…
+
+// ── Chorus 3 (chaos, final) ──────────────────────────────
+[02:49.963] -> [02:50.563] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[02:50.563] -> [02:52.624] { bold: true, pos: "x:15, y:15" } You
+[02:50.713] -> [02:52.624] { bold: true, pos: "x:25, y:23" } made
+[02:50.863] -> [02:52.624] { bold: true, pos: "x:35, y:31" } me
+[02:51.013] -> [02:52.624] { bold: true, pos: "x:45, y:39" } a,
+[02:51.163] -> [02:52.624] { bold: true, pos: "x:55, y:47" } you
+[02:51.313] -> [02:52.624] { bold: true, pos: "x:65, y:55" } made
+[02:51.463] -> [02:52.624] { bold: true, pos: "x:75, y:63" } me
+[02:51.613] -> [02:52.624] { bold: true, pos: "x:85, y:71" } a
+
+[02:52.624] -> [02:57.612] { bold: true, pos: "x:90, y:76" } Believer,
+[02:52.824] -> [02:57.612] { bold: true, pos: "x:95, y:84" } believer
+
+[02:57.612] -> [02:58.212] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[02:58.212] -> [03:00.410] { bold: true, color: "#FFD700", pos: "x:50, y:50" } You break me down and build me up
+
+[03:00.410] -> [03:04.307] { bold: true, color: "#FFD700", pos: "x:50, y:50" } Believer, believer
+
+[03:04.307] -> [03:04.907] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[03:04.907] -> [03:05.407] { italic: true, pos: "x:5, y:40" } Oh,
+[03:05.107] -> [03:05.607] { italic: true, pos: "x:25, y:40" } let
+[03:05.307] -> [03:05.807] { italic: true, pos: "x:45, y:40" } the
+[03:05.507] -> [03:06.007] { italic: true, pos: "x:65, y:40" } bullets
+[03:05.707] -> [03:06.207] { italic: true, color: "#FFD700", size: 44px, pos: "x:90, y:40" } fly,
+[03:06.284] -> [03:09.773] { color: "#ADD8E6", pos: "x:20, y:15" } oh,
+[03:06.884] -> [03:09.773] { color: "#ADD8E6", pos: "x:45, y:40" } let
+[03:07.484] -> [03:09.773] { color: "#ADD8E6", pos: "x:65, y:65" } them
+[03:08.084] -> [03:09.773] { color: "#4682B4", size: 44px, pos: "x:85, y:85" } rain
+
+[03:09.773] -> [03:12.890] My life, my love, my drive, it came from…
+
+[03:12.890] -> [03:13.490] { size: 120px, color: "#FF0000", bold: true, pos: "x:50, y:50" } Pain!
+[03:13.490] -> [03:15.755] { bold: true, pos: "x:15, y:15" } You
+[03:13.640] -> [03:15.755] { bold: true, pos: "x:25, y:23" } made
+[03:13.790] -> [03:15.755] { bold: true, pos: "x:35, y:31" } me
+[03:13.940] -> [03:15.755] { bold: true, pos: "x:45, y:39" } a,
+[03:14.090] -> [03:15.755] { bold: true, pos: "x:55, y:47" } you
+[03:14.240] -> [03:15.755] { bold: true, pos: "x:65, y:55" } made
+[03:14.390] -> [03:15.755] { bold: true, pos: "x:75, y:63" } me
+[03:14.540] -> [03:15.755] { bold: true, pos: "x:85, y:71" } a
+
+[03:15.755] -> [03:19.648] { bold: true, pos: "x:90, y:76" } Believer,
+[03:15.955] -> [03:19.648] { bold: true, pos: "x:95, y:84" } believer
