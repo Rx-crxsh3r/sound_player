@@ -90,8 +90,7 @@ pub fn poll_media(_last_title: &str) -> Result<MediaState, String> {
     // xesam:artist is an array of strings — take the first.
     let artist = metadata.get("xesam:artist")
         .and_then(|v| <&zbus::zvariant::Array>::try_from(v).ok())
-        .and_then(|arr| arr.get(0))
-        .and_then(|v| <&str>::try_from(v).ok())
+        .and_then(|arr| arr.get::<&str>(0).ok().flatten())
         .unwrap_or("").to_string();
 
     let art_url = metadata.get("mpris:artUrl")
