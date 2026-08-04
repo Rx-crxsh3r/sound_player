@@ -194,9 +194,16 @@ async function updateMedia(state) {
 
         // New track — (re)fetch lyrics. Status-only changes (play/pause on
         // the same track) don't trigger a refetch.
+        // has_custom_lyrics (computed once in Rust's media_loop) means a
+        // Custom Lyrics entry already owns this track — skip the lrclib
+        // fetch entirely rather than showing both lyric sources at once.
         if (isNewTrack) {
             lastLyricsKey = lyricsKey;
-            await fetchLyricsForCurrentTrack(state.title, state.artist, state.total_time);
+            if (state.has_custom_lyrics) {
+                await hideLyricsPanel();
+            } else {
+                await fetchLyricsForCurrentTrack(state.title, state.artist, state.total_time);
+            }
         } else {
             updateLyricsForTime(mediaState.currentTime);
         }

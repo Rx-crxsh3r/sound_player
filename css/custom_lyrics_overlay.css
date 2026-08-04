@@ -1,0 +1,29 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+/* Position (left/top) and typography (font/size/color/weight/style/align)
+   are all set inline per-cue from js/custom_lyrics_overlay.js — this file
+   only supplies the anchor/legibility mechanics that never vary per cue. */
+#cue {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  max-width: 90vw;
+  white-space: pre-wrap;
+  line-height: 1.3;
+  /* Keeps text readable over an arbitrary game background regardless of
+     the cue's own color choice. */
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65), 0 0 2px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  will-change: transform;
+}
+
+#cue.hidden {
+  display: none;
+}

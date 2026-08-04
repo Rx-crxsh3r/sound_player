@@ -145,7 +145,7 @@ pub fn poll_media(_last_title: &str) -> Result<MediaState, String> {
 
     let album_art_url = resolve_art_url(&art_url).unwrap_or_default();
 
-    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live })
+    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live, has_custom_lyrics: false })
 }
 
 // mpris:artUrl is usually a local "file://" path to a cached thumbnail,

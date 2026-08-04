@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Custom Lyrics Overlay</title>
+  <link rel="stylesheet" href="css/custom_lyrics_overlay.css" />
+</head>
+<body>
+  <!-- Single reused node — v1 shows one active cue at a time (no
+       overlapping/concurrent cues, no fade/crossfade yet — both deferred).
+       Position/font/color/etc. are applied per-cue via individual
+       style.* property assignments in js/custom_lyrics_overlay.js; text
+       via textContent only. This window is permanently click-through and
+       has no interactive elements at all. -->
+  <div id="cue" class="hidden"></div>
+  <script src="js/custom_lyrics_overlay.js"></script>
+</body>
+</html>

@@ -17,6 +17,7 @@
       <button class="nav-tab"        data-tab="position"    type="button">Position &amp; Edit</button>
       <button class="nav-tab"        data-tab="lyrics"      type="button">Lyrics</button>
       <button class="nav-tab"        data-tab="keybinds"    type="button">Keybinds</button>
+      <button class="nav-tab"        data-tab="customlyrics" type="button">Custom Lyrics</button>
       <button class="nav-tab placeholder" data-tab="media"  type="button">Media Source</button>
     </aside>
 
@@ -243,6 +244,61 @@
             <label for="shortcut-openSettings-enabled">Open Settings</label>
             <button type="button" class="shortcut-recorder" id="shortcut-openSettings-combo">Click to record</button>
             <input type="checkbox" class="toggle-checkbox" id="shortcut-openSettings-enabled" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Custom Lyrics ──────────────────────────── -->
+      <section id="view-customlyrics" class="settings-tab-view">
+        <h1>Custom Lyrics</h1>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <div class="switch-row">
+              <label for="custom-lyrics-enabled-toggle">Enable Custom Lyrics</label>
+              <input type="checkbox" id="custom-lyrics-enabled-toggle" class="toggle-checkbox" />
+            </div>
+            <p class="helper-text">
+              Shows your own uploaded <strong>.clyr</strong> lyric files as a
+              full-screen, click-through overlay with per-line font, size,
+              color, and position. Independent of the regular Lyrics tab —
+              if the playing track matches an enabled entry below, this
+              replaces the regular synced lyrics for that track only.
+            </p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <h2>Add a Song</h2>
+            <div class="control-group">
+              <label for="custom-lyrics-title">Song Title</label>
+              <input type="text" id="custom-lyrics-title" class="control-select" placeholder="e.g. Never Gonna Give You Up" />
+            </div>
+            <div class="control-group">
+              <label for="custom-lyrics-artist">Artist</label>
+              <input type="text" id="custom-lyrics-artist" class="control-select" placeholder="e.g. Rick Astley" />
+            </div>
+            <div class="switch-row" style="margin-bottom:14px">
+              <label for="custom-lyrics-case-sensitive">Case sensitive match</label>
+              <input type="checkbox" id="custom-lyrics-case-sensitive" class="toggle-checkbox" />
+            </div>
+            <div class="control-group no-gap">
+              <label for="custom-lyrics-file">.clyr File</label>
+              <input type="file" id="custom-lyrics-file" accept=".clyr,text/plain" />
+            </div>
+            <div class="actions-row" style="border-top:none;padding-top:14px">
+              <span id="custom-lyrics-add-status" aria-live="polite"></span>
+              <button id="custom-lyrics-add-btn" class="btn-primary" type="button">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="control-group no-gap">
+            <h2>Library</h2>
+            <p class="helper-text" id="custom-lyrics-empty">No custom lyrics added yet.</p>
+            <div id="custom-lyrics-list"></div>
           </div>
         </div>
       </section>

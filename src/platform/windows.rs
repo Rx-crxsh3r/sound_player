@@ -120,7 +120,7 @@ pub fn poll_media(last_title: &str) -> Result<MediaState, String> {
         String::new() // caller restores the cached value
     };
 
-    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live })
+    Ok(MediaState { status, title, artist, album_art_url, current_time, total_time, position_live, has_custom_lyrics: false })
 }
 
 fn read_album_art(

@@ -1,0 +1,9 @@
+{
+  "identifier": "custom-lyrics-overlay-capability",
+  "description": "Permissions for the custom lyrics overlay window (full-screen, click-through cue renderer — js/custom_lyrics_overlay.js). Sizing/positioning is done from Rust, so no window:* grants are needed beyond the defaults.",
+  "windows": ["custom_lyrics_overlay"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

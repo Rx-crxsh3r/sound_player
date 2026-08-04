@@ -37,7 +37,7 @@ fn sync_frontend_assets() -> std::io::Result<()> {
 
     fs::create_dir_all(&dist_dir)?;
 
-    for file in ["index.html", "settings.html", "bar_button.html", "popup.html"] {
+    for file in ["index.html", "settings.html", "bar_button.html", "popup.html", "custom_lyrics_overlay.html"] {
         let src = manifest_dir.join(file);
         let dst = dist_dir.join(file);
         copy_file(&src, &dst)?;
@@ -56,6 +56,7 @@ fn main() {
         "settings.html",
         "bar_button.html",
         "popup.html",
+        "custom_lyrics_overlay.html",
         "css",
         "js",
         "icons",

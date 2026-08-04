@@ -2,17 +2,18 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
 mod audio_analysis;
+mod clyr;
 mod platform;
 
 use std::collections::HashMap;
 use std::fs;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize,
     WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -35,6 +36,12 @@ pub(crate) struct MediaState {
     // local clock against. Always true-when-playing on Linux/MPRIS, whose
     // Position property is specified to be computed fresh on each query.
     pub(crate) position_live: bool,
+    // Set by media_loop (not by platform::poll_media, which knows nothing
+    // about the custom-lyrics library) right after polling — true when the
+    // current title/artist matches an enabled Custom Lyrics entry. The
+    // frontend uses this to skip its regular lrclib.net lyrics fetch for
+    // that track (the two lyric sources are mutually exclusive per track).
+    pub(crate) has_custom_lyrics: bool,
 }
 
 // Detects JPEG/PNG from magic bytes — shared by both platforms' album-art
@@ -91,6 +98,11 @@ struct OverlaySettings {
     // hiding the window outright (see frontend "hotkey-hide-bar" handling
     // in js/main.js — Rust doesn't track lyrics-visible state itself).
     hide_bar_keeps_lyrics: bool,
+    // Independent of lyrics_enabled (lrclib) — a separate lyric source
+    // with its own on/off switch. The two are mutually exclusive per
+    // track (see MediaState.has_custom_lyrics) but not tied to each
+    // other's toggle.
+    custom_lyrics_enabled: bool,
 }
 
 impl Default for OverlaySettings {
@@ -119,6 +131,7 @@ impl Default for OverlaySettings {
             shortcut_toggle_visualizer:  ShortcutBinding::default(),
             shortcut_open_settings:      ShortcutBinding::default(),
             hide_bar_keeps_lyrics: false,
+            custom_lyrics_enabled: false,
         }
     }
 }
@@ -230,7 +243,7 @@ fn parse_lrc(text: &str) -> Vec<LyricsLine> {
     lines
 }
 
-fn parse_lrc_timestamp(tag: &str) -> Option<f32> {
+pub(crate) fn parse_lrc_timestamp(tag: &str) -> Option<f32> {
     // "mm:ss.xx" -> ["mm", "ss", "xx"]
     let normalized = tag.replacen(':', ".", 1);
     let parts: Vec<&str> = normalized.splitn(3, '.').collect();
@@ -298,6 +311,187 @@ fn clear_lyrics_cache(handle: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ── Custom lyrics (.clyr) library ───────────────────────────
+// A separate lyric source from the lrclib.net one above — user-uploaded
+// .clyr files, tagged with a title/artist and matched against the
+// currently-playing track (case-sensitivity is a per-entry choice, since
+// some songs/artists genuinely differ only by case across sources).
+// Mutated by the Settings-window CRUD commands below AND read every ~1s
+// by media_loop, so it's Mutex-managed state, same shape as LyricsCache.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomLyricsEntry {
+    id:             String,
+    title:          String,
+    artist:         String,
+    case_sensitive: bool,
+    enabled:        bool,
+    cues:           Vec<clyr::ClyrCue>,
+}
+
+// Lightweight projection returned to the Settings-window list UI — full
+// cue arrays never need to round-trip there.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CustomLyricsSummary {
+    id:             String,
+    title:          String,
+    artist:         String,
+    case_sensitive: bool,
+    enabled:        bool,
+    cue_count:      usize,
+}
+
+impl From<&CustomLyricsEntry> for CustomLyricsSummary {
+    fn from(e: &CustomLyricsEntry) -> Self {
+        Self {
+            id:             e.id.clone(),
+            title:          e.title.clone(),
+            artist:         e.artist.clone(),
+            case_sensitive: e.case_sensitive,
+            enabled:        e.enabled,
+            cue_count:      e.cues.len(),
+        }
+    }
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct CustomLyricsLibraryData {
+    entries: Vec<CustomLyricsEntry>,
+}
+
+impl CustomLyricsLibraryData {
+    // First enabled match wins on title/artist collisions between two
+    // entries — undocumented edge case, not expected in practice.
+    fn find_match(&self, title: &str, artist: &str) -> Option<&CustomLyricsEntry> {
+        let title  = title.trim();
+        let artist = artist.trim();
+        self.entries.iter().find(|e| {
+            if !e.enabled { return false; }
+            if e.case_sensitive {
+                e.title.trim() == title && e.artist.trim() == artist
+            } else {
+                e.title.trim().eq_ignore_ascii_case(title) && e.artist.trim().eq_ignore_ascii_case(artist)
+            }
+        })
+    }
+}
+
+struct CustomLyricsLibrary(Mutex<CustomLyricsLibraryData>);
+
+fn custom_lyrics_path(handle: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = handle.path().app_config_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("custom_lyrics.json"))
+}
+
+fn load_custom_lyrics_library(handle: &AppHandle) -> CustomLyricsLibraryData {
+    let Ok(path) = custom_lyrics_path(handle)   else { return CustomLyricsLibraryData::default(); };
+    let Ok(raw)  = fs::read_to_string(&path)    else { return CustomLyricsLibraryData::default(); };
+    serde_json::from_str(&raw).unwrap_or_default()
+}
+
+fn save_custom_lyrics_library(handle: &AppHandle, data: &CustomLyricsLibraryData) -> Result<(), String> {
+    let path    = custom_lyrics_path(handle)?;
+    let content = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+// Not a security boundary (single-user local library) — just needs to not
+// collide within one app session, so no uuid/rand dependency is needed.
+static CUSTOM_LYRICS_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
+fn generate_custom_lyrics_id() -> String {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos();
+    format!("{:x}-{}", nanos, CUSTOM_LYRICS_ID_COUNTER.fetch_add(1, Ordering::Relaxed))
+}
+
+#[tauri::command]
+fn list_custom_lyrics(handle: AppHandle) -> Vec<CustomLyricsSummary> {
+    let Some(lib) = handle.try_state::<CustomLyricsLibrary>() else { return Vec::new(); };
+    let data = lib.0.lock().unwrap();
+    data.entries.iter().map(CustomLyricsSummary::from).collect()
+}
+
+#[tauri::command]
+fn add_custom_lyrics(
+    handle: AppHandle,
+    title: String,
+    artist: String,
+    case_sensitive: bool,
+    clyr_source: String,
+) -> Result<CustomLyricsSummary, String> {
+    let cues = clyr::parse_clyr(&clyr_source).map_err(|e| e.to_string())?;
+    let entry = CustomLyricsEntry {
+        id: generate_custom_lyrics_id(),
+        title: title.trim().to_string(),
+        artist: artist.trim().to_string(),
+        case_sensitive,
+        enabled: true,
+        cues,
+    };
+    let summary = CustomLyricsSummary::from(&entry);
+
+    let lib = handle.try_state::<CustomLyricsLibrary>().ok_or("custom lyrics library unavailable")?;
+    let mut data = lib.0.lock().unwrap();
+    data.entries.push(entry);
+    save_custom_lyrics_library(&handle, &data)?;
+
+    Ok(summary)
+}
+
+#[tauri::command]
+fn update_custom_lyrics_meta(
+    handle: AppHandle,
+    id: String,
+    title: String,
+    artist: String,
+    case_sensitive: bool,
+    enabled: bool,
+) -> Result<(), String> {
+    let lib = handle.try_state::<CustomLyricsLibrary>().ok_or("custom lyrics library unavailable")?;
+    let mut data = lib.0.lock().unwrap();
+    let entry = data.entries.iter_mut().find(|e| e.id == id).ok_or("entry not found")?;
+    entry.title          = title.trim().to_string();
+    entry.artist         = artist.trim().to_string();
+    entry.case_sensitive = case_sensitive;
+    entry.enabled        = enabled;
+    save_custom_lyrics_library(&handle, &data)
+}
+
+#[tauri::command]
+fn replace_custom_lyrics_file(handle: AppHandle, id: String, clyr_source: String) -> Result<CustomLyricsSummary, String> {
+    let cues = clyr::parse_clyr(&clyr_source).map_err(|e| e.to_string())?;
+
+    let lib = handle.try_state::<CustomLyricsLibrary>().ok_or("custom lyrics library unavailable")?;
+    let mut data = lib.0.lock().unwrap();
+    let entry = data.entries.iter_mut().find(|e| e.id == id).ok_or("entry not found")?;
+    entry.cues = cues;
+    let summary = CustomLyricsSummary::from(&*entry);
+    save_custom_lyrics_library(&handle, &data)?;
+
+    Ok(summary)
+}
+
+#[tauri::command]
+fn delete_custom_lyrics(handle: AppHandle, id: String) -> Result<(), String> {
+    let lib = handle.try_state::<CustomLyricsLibrary>().ok_or("custom lyrics library unavailable")?;
+    let mut data = lib.0.lock().unwrap();
+    let before = data.entries.len();
+    data.entries.retain(|e| e.id != id);
+    if data.entries.len() == before {
+        return Err("entry not found".into());
+    }
+    save_custom_lyrics_library(&handle, &data)
+}
+
+#[tauri::command]
+fn find_custom_lyrics_for_track(handle: AppHandle, title: String, artist: String) -> Option<CustomLyricsEntry> {
+    let lib  = handle.try_state::<CustomLyricsLibrary>()?;
+    let data = lib.0.lock().unwrap();
+    data.find_match(&title, &artist).cloned()
+}
+
 // ── Tauri commands ─────────────────────────────────────────
 #[tauri::command]
 fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
@@ -311,6 +505,7 @@ fn load_overlay_settings(handle: AppHandle) -> OverlaySettings {
 fn save_overlay_settings(handle: AppHandle, settings: OverlaySettings) -> Result<Vec<String>, String> {
     write_settings(&handle, &settings)?;
     let failed_shortcuts = sync_shortcuts(&handle, &settings);
+    sync_custom_lyrics_overlay_visibility(&handle, &settings);
     let _ = handle.emit("overlay-settings-updated", &settings);
     Ok(failed_shortcuts)
 }
@@ -556,6 +751,53 @@ fn sync_popup_position(handle: &AppHandle) {
     }
 }
 
+// ── Custom lyrics overlay window ────────────────────────────
+// Unlike bar_button/popup, this covers the whole primary monitor (cues can
+// be placed anywhere on screen via their pos:x/y) and is permanently
+// click-through — it has no interactive state at all, so
+// set_ignore_cursor_events is set once and never toggled. Created once at
+// startup; OS-level show/hide is tied only to the customLyricsEnabled
+// master setting (a rare event), not to per-track match/no-match, which
+// the frontend instead handles by clearing rendered text client-side —
+// avoids window show/hide churn on every track change.
+fn open_custom_lyrics_overlay_window(handle: &AppHandle) {
+    if handle.get_webview_window("custom_lyrics_overlay").is_some() { return; }
+    let Ok(win) = WebviewWindowBuilder::new(handle, "custom_lyrics_overlay", WebviewUrl::App("custom_lyrics_overlay.html".into()))
+        .title("Custom Lyrics Overlay")
+        .resizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .visible(false)
+        .build()
+    else { return };
+    platform::float_window(&win);
+
+    // primary_monitor(), not current_monitor() — the latter is relative to
+    // an existing window and has no meaning here. position() matters
+    // because on multi-monitor setups the primary display isn't
+    // necessarily at virtual-desktop (0,0).
+    if let Ok(Some(monitor)) = handle.primary_monitor() {
+        let _ = win.set_position(PhysicalPosition::new(monitor.position().x, monitor.position().y));
+        let _ = win.set_size(PhysicalSize::new(monitor.size().width, monitor.size().height));
+    }
+}
+
+fn sync_custom_lyrics_overlay_visibility(handle: &AppHandle, settings: &OverlaySettings) {
+    let Some(win) = handle.get_webview_window("custom_lyrics_overlay") else { return; };
+    if settings.custom_lyrics_enabled {
+        let _ = win.show();
+        // Must run after show() realizes the window — same requirement as
+        // the main bar's own set_ignore_cursor_events call in .setup().
+        let _ = win.set_ignore_cursor_events(true);
+    } else {
+        let _ = win.hide();
+    }
+}
+
 // ── Settings window ────────────────────────────────────────
 fn open_settings_window(handle: &AppHandle) {
     if let Some(win) = handle.get_webview_window("settings") {
@@ -626,6 +868,12 @@ fn main() {
             clear_lyrics_cache,
             close_popup_window,
             set_main_visible,
+            list_custom_lyrics,
+            add_custom_lyrics,
+            update_custom_lyrics_meta,
+            replace_custom_lyrics_file,
+            delete_custom_lyrics,
+            find_custom_lyrics_for_track,
         ])
         .on_window_event(|window, event| {
             let label = window.label();
@@ -661,6 +909,9 @@ fn main() {
             let lyrics_cache = load_lyrics_cache(&handle);
             app.manage(LyricsCache(Mutex::new(lyrics_cache)));
 
+            let custom_lyrics = load_custom_lyrics_library(&handle);
+            app.manage(CustomLyricsLibrary(Mutex::new(custom_lyrics)));
+
             sync_shortcuts(&handle, &saved);
 
             if let Some(main) = app.get_webview_window("main") {
@@ -684,6 +935,9 @@ fn main() {
 
             open_popup_window(&handle);
             sync_popup_position(&handle);
+
+            open_custom_lyrics_overlay_window(&handle);
+            sync_custom_lyrics_overlay_visibility(&handle, &saved);
 
             let tray_menu = build_tray_menu(&handle)?;
             TrayIconBuilder::new()
@@ -728,6 +982,15 @@ async fn media_loop(handle: AppHandle) {
                 } else {
                     cached_art = state.album_art_url.clone();
                 }
+
+                // Custom Lyrics library lives in Mutex-managed state (mutated
+                // by the Settings-window CRUD commands) — lock scoped to
+                // this block so the guard drops before the sleep().await
+                // below, never held across an await point.
+                if let Some(lib) = handle.try_state::<CustomLyricsLibrary>() {
+                    state.has_custom_lyrics = lib.0.lock().unwrap().find_match(&state.title, &state.artist).is_some();
+                }
+
                 let changed = state.title != last_title || state.status != last_status;
                 if changed {
                     last_title  = state.title.clone();
@@ -755,6 +1018,7 @@ async fn media_loop(handle: AppHandle) {
                         current_time:  0,
                         total_time:    0,
                         position_live: false,
+                        has_custom_lyrics: false,
                     });
                 }
             }

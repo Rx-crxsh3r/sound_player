@@ -25,6 +25,7 @@ const DEFAULTS = {
     shortcutToggleVisualizer:    { enabled: false, combo: '' },
     shortcutOpenSettings:        { enabled: false, combo: '' },
     hideBarKeepsLyrics: false,
+    customLyricsEnabled: false,
 };
 
 // Matches the camelCase action IDs used in settings.html's
@@ -255,6 +256,8 @@ function populateUI(s) {
     document.getElementById('lyrics-enabled-toggle').checked = Boolean(s.lyricsEnabled);
     document.getElementById('lyrics-display-mode').value     = s.lyricsDisplayMode === 'bar' ? 'bar' : 'popup';
 
+    document.getElementById('custom-lyrics-enabled-toggle').checked = Boolean(s.customLyricsEnabled);
+
     populateShortcuts(s);
 
     applyThemeLink(s.theme);
@@ -280,9 +283,208 @@ function readUI() {
         visualizerSmoothing: parseFloat(document.getElementById('visualizer-smoothing').value),
         lyricsEnabled:       document.getElementById('lyrics-enabled-toggle').checked,
         lyricsDisplayMode:   document.getElementById('lyrics-display-mode').value,
+        customLyricsEnabled: document.getElementById('custom-lyrics-enabled-toggle').checked,
         ...readShortcuts(),
     };
     return result;
+}
+
+// ── Custom Lyrics library (add/edit/delete) ─────────────────
+// Unlike every other settings field, these take effect immediately via
+// their own commands (matching the existing clear-lyrics-cache-btn
+// pattern below) rather than waiting for the bulk Save & Apply — the
+// library is a list of independent records, not a single settings blob.
+let customLyricsEditingId = null; // id of the entry currently expanded for editing, or null
+
+async function loadCustomLyricsList() {
+    const container = document.getElementById('custom-lyrics-list');
+    const empty     = document.getElementById('custom-lyrics-empty');
+    if (!container) return;
+
+    let entries = [];
+    try {
+        entries = await invoke('list_custom_lyrics');
+    } catch (err) {
+        console.warn('[CUSTOM-LYRICS] list_custom_lyrics failed:', err);
+    }
+
+    container.innerHTML = '';
+    if (empty) empty.style.display = entries.length === 0 ? '' : 'none';
+    entries.forEach(entry => container.appendChild(customLyricsRowEl(entry)));
+}
+
+// Built via DOM APIs + textContent (not innerHTML with interpolated
+// strings) — title/artist are user-supplied text, and this keeps the same
+// "never let uploaded/typed content become markup" rule the overlay
+// renderer itself follows.
+function customLyricsRowEl(entry) {
+    const row = document.createElement('div');
+    row.className = 'custom-lyrics-row';
+
+    const info = document.createElement('div');
+    info.className = 'custom-lyrics-row-info';
+    const titleLine = document.createElement('div');
+    titleLine.className = 'custom-lyrics-row-title';
+    const titleSpan = document.createElement('span');
+    titleSpan.textContent = entry.title || '(untitled)';
+    titleLine.appendChild(titleSpan);
+    if (entry.artist) {
+        const artistSpan = document.createElement('span');
+        artistSpan.className = 'custom-lyrics-row-artist';
+        artistSpan.textContent = ` — ${entry.artist}`;
+        titleLine.appendChild(artistSpan);
+    }
+    const meta = document.createElement('div');
+    meta.className = 'custom-lyrics-row-meta';
+    meta.textContent = `${entry.cueCount} cue${entry.cueCount === 1 ? '' : 's'}${entry.caseSensitive ? ' · case sensitive' : ''}`;
+    info.append(titleLine, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'custom-lyrics-row-actions';
+
+    const enabledLabel = document.createElement('label');
+    enabledLabel.className = 'custom-lyrics-row-enable';
+    enabledLabel.title = 'Enabled';
+    const enabledCheckbox = document.createElement('input');
+    enabledCheckbox.type = 'checkbox';
+    enabledCheckbox.className = 'toggle-checkbox';
+    enabledCheckbox.checked = Boolean(entry.enabled);
+    enabledCheckbox.addEventListener('change', async () => {
+        try {
+            await invoke('update_custom_lyrics_meta', {
+                id: entry.id,
+                title: entry.title,
+                artist: entry.artist,
+                caseSensitive: entry.caseSensitive,
+                enabled: enabledCheckbox.checked,
+            });
+        } catch (err) {
+            console.warn('[CUSTOM-LYRICS] update_custom_lyrics_meta failed:', err);
+            enabledCheckbox.checked = !enabledCheckbox.checked;
+        }
+    });
+    enabledLabel.appendChild(enabledCheckbox);
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn-ghost';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => {
+        customLyricsEditingId = customLyricsEditingId === entry.id ? null : entry.id;
+        loadCustomLyricsList();
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'btn-ghost';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', async () => {
+        if (deleteBtn.dataset.confirm !== '1') {
+            deleteBtn.dataset.confirm = '1';
+            deleteBtn.textContent = 'Confirm?';
+            setTimeout(() => {
+                deleteBtn.dataset.confirm = '';
+                deleteBtn.textContent = 'Delete';
+            }, 3000);
+            return;
+        }
+        try {
+            await invoke('delete_custom_lyrics', { id: entry.id });
+            await loadCustomLyricsList();
+        } catch (err) {
+            console.warn('[CUSTOM-LYRICS] delete_custom_lyrics failed:', err);
+        }
+    });
+
+    actions.append(enabledLabel, editBtn, deleteBtn);
+    row.append(info, actions);
+
+    if (customLyricsEditingId === entry.id) {
+        row.appendChild(customLyricsEditFormEl(entry));
+    }
+
+    return row;
+}
+
+// "Editing" is metadata (title/artist/case-sensitivity) and an optional
+// wholesale file replacement — not a cue-by-cue editor, which is
+// explicitly out of scope for this app (too heavy for a game overlay).
+function customLyricsEditFormEl(entry) {
+    const form = document.createElement('div');
+    form.className = 'custom-lyrics-edit-form';
+
+    const titleInput = document.createElement('input');
+    titleInput.type = 'text';
+    titleInput.className = 'control-select';
+    titleInput.value = entry.title;
+    titleInput.placeholder = 'Song Title';
+
+    const artistInput = document.createElement('input');
+    artistInput.type = 'text';
+    artistInput.className = 'control-select';
+    artistInput.value = entry.artist;
+    artistInput.placeholder = 'Artist';
+
+    const caseRow = document.createElement('div');
+    caseRow.className = 'switch-row';
+    const caseText = document.createElement('label');
+    caseText.textContent = 'Case sensitive match';
+    const caseCheckbox = document.createElement('input');
+    caseCheckbox.type = 'checkbox';
+    caseCheckbox.className = 'toggle-checkbox';
+    caseCheckbox.checked = Boolean(entry.caseSensitive);
+    caseRow.append(caseText, caseCheckbox);
+
+    const fileLabel = document.createElement('label');
+    fileLabel.className = 'custom-lyrics-replace-label';
+    fileLabel.textContent = 'Replace file (optional)';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.clyr,text/plain';
+
+    const status = document.createElement('span');
+    status.className = 'custom-lyrics-edit-status';
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'custom-lyrics-edit-btn-row';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn-primary';
+    saveBtn.textContent = 'Save';
+    saveBtn.addEventListener('click', async () => {
+        status.textContent = 'Saving…';
+        try {
+            await invoke('update_custom_lyrics_meta', {
+                id: entry.id,
+                title: titleInput.value,
+                artist: artistInput.value,
+                caseSensitive: caseCheckbox.checked,
+                enabled: entry.enabled,
+            });
+            if (fileInput.files && fileInput.files[0]) {
+                const clyrSource = await fileInput.files[0].text();
+                await invoke('replace_custom_lyrics_file', { id: entry.id, clyrSource });
+            }
+            customLyricsEditingId = null;
+            await loadCustomLyricsList();
+        } catch (err) {
+            status.textContent = `Failed: ${String(err)}`;
+        }
+    });
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-ghost';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+        customLyricsEditingId = null;
+        loadCustomLyricsList();
+    });
+
+    btnRow.append(saveBtn, cancelBtn, status);
+    form.append(titleInput, artistInput, caseRow, fileLabel, fileInput, btnRow);
+    return form;
 }
 
 // ── Live readout update while sliders move ─────────────────
@@ -331,8 +533,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     ['theme-select', 'active-opacity', 'idle-opacity',
      'accent-color-picker', 'edit-mode-toggle', 'offset-x', 'offset-y',
      'visualizer-enabled', 'visualizer-bands', 'visualizer-gain', 'visualizer-smoothing',
-     'lyrics-enabled-toggle', 'lyrics-display-mode']
+     'lyrics-enabled-toggle', 'lyrics-display-mode', 'custom-lyrics-enabled-toggle']
         .forEach(id => document.getElementById(id).addEventListener('input', liveUpdate));
+
+    await loadCustomLyricsList();
+
+    document.getElementById('custom-lyrics-add-btn').addEventListener('click', async () => {
+        const status       = document.getElementById('custom-lyrics-add-status');
+        const titleInput   = document.getElementById('custom-lyrics-title');
+        const artistInput  = document.getElementById('custom-lyrics-artist');
+        const caseInput    = document.getElementById('custom-lyrics-case-sensitive');
+        const fileInput    = document.getElementById('custom-lyrics-file');
+
+        const title  = titleInput.value.trim();
+        const artist = artistInput.value.trim();
+        const file   = fileInput.files && fileInput.files[0];
+
+        if (!title || !artist) {
+            if (status) status.textContent = 'Title and artist are required.';
+            return;
+        }
+        if (!file) {
+            if (status) status.textContent = 'Choose a .clyr file.';
+            return;
+        }
+
+        if (status) status.textContent = 'Adding…';
+        try {
+            const clyrSource = await file.text();
+            await invoke('add_custom_lyrics', {
+                title, artist,
+                caseSensitive: caseInput.checked,
+                clyrSource,
+            });
+            titleInput.value  = '';
+            artistInput.value = '';
+            caseInput.checked = false;
+            fileInput.value   = '';
+            if (status) status.textContent = 'Added.';
+            await loadCustomLyricsList();
+            setTimeout(() => { if (status) status.textContent = ''; }, 2000);
+        } catch (err) {
+            if (status) status.textContent = `Failed: ${String(err)}`;
+        }
+    });
 
     document.getElementById('clear-lyrics-cache-btn').addEventListener('click', async () => {
         const status = document.getElementById('lyrics-cache-status');

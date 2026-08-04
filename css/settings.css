@@ -449,3 +449,88 @@ label {
   color: var(--text-color, #e0e0e0);
   border-color: var(--ui-btn-ghost-hover-border);
 }
+
+/* ── Custom Lyrics library list ──────────────────────────── */
+#custom-lyrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.custom-lyrics-row {
+  border: 1px solid var(--ui-card-border);
+  border-radius: 10px;
+  background: var(--ui-input-bg);
+  padding: 12px 14px;
+}
+
+.custom-lyrics-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.custom-lyrics-row-title {
+  font-size: 0.94rem;
+  color: var(--text-color, #e0e0e0);
+  font-weight: 600;
+}
+
+.custom-lyrics-row-artist {
+  font-weight: 400;
+  color: var(--text-color-muted, #a0a0a0);
+}
+
+.custom-lyrics-row-meta {
+  font-size: 0.8rem;
+  color: var(--text-color-muted, #a0a0a0);
+}
+
+.custom-lyrics-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.custom-lyrics-row-enable {
+  display: flex;
+  align-items: center;
+  margin-right: auto;
+}
+
+.custom-lyrics-row-actions .btn-ghost {
+  padding: 6px 14px;
+  font-size: 0.84rem;
+}
+
+.custom-lyrics-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-card-border);
+}
+
+.custom-lyrics-edit-form input[type="text"] {
+  width: 100%;
+  max-width: none;
+}
+
+.custom-lyrics-replace-label {
+  font-size: 0.84rem;
+  color: var(--text-color-muted, #a0a0a0);
+  margin-bottom: -4px;
+}
+
+.custom-lyrics-edit-btn-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-lyrics-edit-status {
+  font-size: 0.84rem;
+  color: var(--text-color-muted, #a0a0a0);
+}
