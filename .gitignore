@@ -24,3 +24,11 @@ target
 notes
 dist/
 gen/
+
+# Scratch folder for staging release artifacts before upload to GitHub
+release-staging/
+
+# Internal-only docs — not meant for the public repo (verification info
+# for end users lives in README.md instead; see there)
+LINUX_TESTING.md
+SIGNING.md

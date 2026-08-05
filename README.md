@@ -1,7 +1,7 @@
 # 🎵 SoundwaveOverlay
 
 ![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)
-![Tauri](https://img.shields.io/badge/tauri-v1-blue.svg)
+![Tauri](https://img.shields.io/badge/tauri-v2-blue.svg)
 ![Tokio](https://img.shields.io/badge/tokio-1.x-purple.svg)
     <!-- very cute badges. this message is hidden pls go away -->
 
@@ -31,6 +31,22 @@ It's being built in **Rust** with a frontend powered by **Tauri**, making it ult
 - 🎨 Template-based theming (dark/light/custom CSS)
 - 🔄 Real-time system media info (Spotify, VLC, browsers, etc.)
 - 🌍 Cross-platform support (Windows, macOS, Linux)
+
+## Verifying a release
+
+Releases include `SHA256SUMS.txt` and a detached signature
+(`SHA256SUMS.txt.asc`) so you can confirm a download is exactly what was
+built here and hasn't been altered or substituted.
+
+```
+gpg --import RELEASE_SIGNING_KEY.asc      # once
+gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
+sha256sum -c SHA256SUMS.txt               # or Get-FileHash on Windows
+```
+
+Key: `Rx-crxsh3r <ahmed.ab2824@gmail.com>`
+Fingerprint: `CF8F2D55 C53029B6 A629253E 3B550FAE 05AC57C2`
+([public key](RELEASE_SIGNING_KEY.asc))
 
 ## Contributing / Feedback
 
