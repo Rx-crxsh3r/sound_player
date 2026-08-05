@@ -24,3 +24,7 @@ target
 notes
 dist/
 gen/
+
+LINUX_TESTING.md
+SIGNING.md
+release-staging/
