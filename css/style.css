@@ -152,7 +152,7 @@ button.danger:hover { background: var(--danger); color: #fff; }
 #inspector-panel .row label { margin-bottom: 0; flex: 1; }
 #inspector-panel .row input[type="checkbox"] { margin-right: 6px; }
 
-#insp-delete-btn { width: 100%; margin-top: 10px; }
+#insp-duplicate-btn, #insp-delete-btn { width: 100%; margin-top: 10px; }
 
 /* ── Layer list ──────────────────────────────────────────── */
 .layer-row {
@@ -207,6 +207,14 @@ button.danger:hover { background: var(--danger); color: #fff; }
 .box:hover { outline-color: rgba(255,255,255,0.35); }
 .box.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
 .box.shadow-fx { text-shadow: 0 2px 6px rgba(0,0,0,0.65), 0 0 2px rgba(0,0,0,0.5); }
+/* Double-click enters inline text editing — swap the drag affordance for
+   a normal text-editing one and allow real selection/cursor placement. */
+.box[contenteditable="true"] {
+  cursor: text;
+  user-select: text;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 /* ── Status bar ──────────────────────────────────────────── */
 #status-bar {

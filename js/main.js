@@ -10,6 +10,8 @@ let currentProjectPath = null;
 let seeking = false;
 let lastActiveCanvasKey = '';
 let dragState = null;
+let editingCueId = null; // cue currently in double-click inline text edit
+let clipboardCue = null; // deep-cloned cue, ready to paste
 
 let undoStack = [];
 const UNDO_LIMIT = 100;
@@ -27,6 +29,22 @@ const NAMED_COLOR_HEX = {
 };
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// Nudges a copy's position down-and-left of its source, shared by
+// Duplicate and Paste, so the new box is visibly distinct on the canvas
+// rather than sitting exactly on top of the original.
+function offsetClonePosition(style) {
+    style.posX = clamp((style.posX ?? 50) - 3, 0, 100);
+    style.posY = clamp((style.posY ?? 85) + 3, 0, 100);
+}
+
+// Keyboard shortcuts (undo, copy, paste) must not fight normal text
+// editing — a focused <input>/<textarea>/contenteditable box should get
+// its own native copy/paste/undo, not the app-level ones.
+function isTextEditingContext() {
+    const el = document.activeElement;
+    return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+}
 
 // <input type="color"> only ever accepts/shows plain #rrggbb — this is a
 // known, accepted narrowing vs. the full format (named colors, #RGB,
@@ -104,7 +122,15 @@ document.getElementById('audio-file-input').addEventListener('change', (e) => {
     document.getElementById('play-pause-btn').disabled = false;
     document.getElementById('seek-bar').disabled = false;
     document.getElementById('add-box-btn').disabled = false;
+    document.getElementById('speed-select').disabled = false;
+    audioEl.playbackRate = Number(document.getElementById('speed-select').value);
     setStatus(`Loaded ${file.name}`);
+});
+
+// Slow playback down for precise cue placement (or speed through
+// already-timed sections) — <audio>.playbackRate does all the work.
+document.getElementById('speed-select').addEventListener('change', (e) => {
+    audioEl.playbackRate = Number(e.target.value);
 });
 
 audioEl.addEventListener('loadedmetadata', () => {
@@ -212,19 +238,30 @@ function renderCanvas() {
         }
         el.dataset.cueId = cue.id;
         el.addEventListener('pointerdown', onBoxPointerDown);
+        el.addEventListener('dblclick', onBoxDoubleClick);
         canvas.appendChild(el);
     }
 }
 
 // ── drag-to-position (the primary way to set pos) ────────────
+// Snapshot is deferred to the first actual pointermove, not pointerdown —
+// a plain click-to-select (or either half of a double-click) never moves
+// the pointer, so it no longer pushes a no-op entry onto the undo stack.
 function onBoxPointerDown(e) {
     e.preventDefault();
     const cueId = e.currentTarget.dataset.cueId;
-    selectCue(cueId);
+    if (editingCueId === cueId) return; // let the contenteditable box handle its own clicks
+    // NOT selectCue() here — it forces a full canvas rebuild
+    // (canvas.innerHTML = ''), which would destroy e.currentTarget itself
+    // mid-gesture: every subsequent pointermove would then be writing
+    // style.left/top onto a detached, invisible node — the box looking
+    // like it doesn't drag at all. selectCueForDrag updates selection
+    // state and the .selected class in place instead, without touching
+    // the DOM node the drag is actually tracking.
+    selectCueForDrag(cueId, e.currentTarget);
     const canvas = document.getElementById('canvas');
     const rect = canvas.getBoundingClientRect();
-    snapshot(); // one snapshot per drag gesture, not per pointermove tick
-    dragState = { cueId, rect, el: e.currentTarget };
+    dragState = { cueId, rect, el: e.currentTarget, moved: false };
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.addEventListener('pointermove', onBoxPointerMove);
     e.currentTarget.addEventListener('pointerup', onBoxPointerUp);
@@ -232,10 +269,14 @@ function onBoxPointerDown(e) {
 function onBoxPointerMove(e) {
     if (!dragState) return;
     const { rect, cueId, el } = dragState;
-    const xPct = clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100);
-    const yPct = clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100);
     const cue = cues.find((c) => c.id === cueId);
     if (!cue) return;
+    if (!dragState.moved) {
+        snapshot();
+        dragState.moved = true;
+    }
+    const xPct = clamp(((e.clientX - rect.left) / rect.width) * 100, 0, 100);
+    const yPct = clamp(((e.clientY - rect.top) / rect.height) * 100, 0, 100);
     cue.style.posX = Math.round(xPct * 10) / 10;
     cue.style.posY = Math.round(yPct * 10) / 10;
     // Direct imperative update on the dragged element only — not a full
@@ -250,11 +291,59 @@ function onBoxPointerMove(e) {
 }
 function onBoxPointerUp(e) {
     if (!dragState) return;
-    const { el } = dragState;
+    const { el, moved } = dragState;
     el.removeEventListener('pointermove', onBoxPointerMove);
     el.removeEventListener('pointerup', onBoxPointerUp);
     dragState = null;
-    scheduleAutosave();
+    if (moved) scheduleAutosave();
+}
+
+// ── double-click to edit text inline, directly on the box ───
+function onBoxDoubleClick(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    const cueId = e.currentTarget.dataset.cueId;
+    selectCue(cueId); // rebuilds the canvas — grab a fresh element afterward
+    const freshEl = document.querySelector(`.box[data-cue-id="${cueId}"]`);
+    if (freshEl) startInlineEdit(cueId, freshEl);
+}
+
+function startInlineEdit(cueId, el) {
+    editingCueId = cueId;
+    el.contentEditable = 'true';
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    function onKeydown(ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); el.blur(); }
+        else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            const cue = cues.find((c) => c.id === cueId);
+            el.textContent = cue ? cue.text : '';
+            el.blur();
+        }
+    }
+    function commit() {
+        el.contentEditable = 'false';
+        editingCueId = null;
+        el.removeEventListener('blur', commit);
+        el.removeEventListener('keydown', onKeydown);
+        const cue = cues.find((c) => c.id === cueId);
+        if (cue) {
+            const newText = (el.textContent || '').trim() || ' ';
+            if (newText !== cue.text) {
+                snapshot();
+                cue.text = newText;
+            }
+        }
+        renderAll();
+    }
+    el.addEventListener('blur', commit);
+    el.addEventListener('keydown', onKeydown);
 }
 
 // ── layer list ───────────────────────────────────────────────
@@ -286,6 +375,26 @@ function selectCue(cueId) {
     selectedCueId = cueId;
     lastActiveCanvasKey = ''; // force a rebuild so the .selected outline updates
     renderCanvas();
+    renderLayerList();
+    renderInspector();
+}
+
+// Selection specifically for the start of a drag gesture: toggles the
+// .selected class on the existing, already-attached box element in
+// place, and keeps lastActiveCanvasKey in sync with the new selection so
+// a later unrelated renderCanvas() call doesn't think something changed
+// and rebuild needlessly — but never touches canvas.innerHTML itself, so
+// the very element the drag is tracking is never destroyed.
+function selectCueForDrag(cueId, el) {
+    const prevSelected = document.querySelector('.box.selected');
+    if (prevSelected && prevSelected !== el) prevSelected.classList.remove('selected');
+    el.classList.add('selected');
+    selectedCueId = cueId;
+
+    const t = audioEl.currentTime || 0;
+    const active = findActiveCues(t);
+    lastActiveCanvasKey = active.map((c) => c.id).sort().join(',') + '|' + selectedCueId;
+
     renderLayerList();
     renderInspector();
 }
@@ -439,6 +548,18 @@ function bindInspectorForm() {
         cue.end = audioEl.currentTime;
         renderAll();
     });
+    document.getElementById('insp-duplicate-btn').addEventListener('click', () => {
+        const cue = cues.find((c) => c.id === selectedCueId);
+        if (!cue) return;
+        snapshot();
+        const clone = structuredClone(cue);
+        clone.id = generateCueId();
+        offsetClonePosition(clone.style);
+        cues.push(clone);
+        selectedCueId = clone.id;
+        renderAll();
+        setStatus('Duplicated cue.');
+    });
     document.getElementById('insp-delete-btn').addEventListener('click', () => {
         const cue = cues.find((c) => c.id === selectedCueId);
         if (!cue) return;
@@ -497,22 +618,21 @@ document.getElementById('clyr-file-input').addEventListener('change', async (e) 
     e.target.value = '';
 });
 
-document.getElementById('export-clyr-btn').addEventListener('click', () => {
+// Routed through Rust (blocking_save_file), same as project save below —
+// a Blob + <a download> click doesn't reliably trigger a real save dialog
+// in WebView2 the way it does in a normal browser tab.
+document.getElementById('export-clyr-btn').addEventListener('click', async () => {
     if (cues.length === 0) {
         setStatus('Nothing to export — add at least one cue first.', true);
         return;
     }
     const text = serializeClyr(defaults, cues);
-    const blob = new Blob([text], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'export.clyr';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setStatus(`Exported ${cues.length} cue${cues.length === 1 ? '' : 's'}.`);
+    try {
+        const path = await invoke('export_clyr_dialog', { content: text });
+        if (path) setStatus(`Exported ${cues.length} cue${cues.length === 1 ? '' : 's'} to ${path}`);
+    } catch (err) {
+        setStatus(`Export failed: ${String(err)}`, true);
+    }
 });
 
 // ── project (.clyrproj) save/open — native dialogs via Rust ──
@@ -548,11 +668,47 @@ document.getElementById('open-project-btn').addEventListener('click', async () =
     }
 });
 
+// ── copy / paste (Ctrl+C / Ctrl+V) ──────────────────────────
+// Paste re-anchors the copy to the CURRENT playhead (same duration as the
+// source) rather than the source's original time — the useful behavior
+// for spreading one styled box across a timeline — with the same small
+// down-left nudge Duplicate uses so it's visually distinct even when
+// pasted back at a moment where it'd otherwise sit on the original.
+function copySelectedCue() {
+    const cue = cues.find((c) => c.id === selectedCueId);
+    if (!cue) return;
+    clipboardCue = structuredClone(cue);
+    setStatus('Copied cue.');
+}
+function pasteCue() {
+    if (!clipboardCue) return;
+    snapshot();
+    const duration = clipboardCue.end - clipboardCue.start;
+    const start = Number.isFinite(audioEl.currentTime) ? audioEl.currentTime : clipboardCue.start;
+    const clone = structuredClone(clipboardCue);
+    clone.id = generateCueId();
+    clone.start = start;
+    clone.end = start + duration;
+    offsetClonePosition(clone.style);
+    cues.push(clone);
+    selectedCueId = clone.id;
+    renderAll();
+    setStatus(`Pasted cue at ${formatClock(start)}.`);
+}
+
 document.getElementById('undo-btn').addEventListener('click', undo);
 document.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    if (isTextEditingContext()) return; // let native input undo/copy/paste happen
+    const key = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault();
         undo();
+    } else if ((e.ctrlKey || e.metaKey) && key === 'c') {
+        e.preventDefault();
+        copySelectedCue();
+    } else if ((e.ctrlKey || e.metaKey) && key === 'v') {
+        e.preventDefault();
+        pasteCue();
     }
 });
 
