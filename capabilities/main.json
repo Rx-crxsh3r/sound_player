@@ -1,0 +1,9 @@
+{
+  "identifier": "main-capability",
+  "description": "Permissions for the single Clyr Studio window. The dialog plugin is only ever called from Rust (via our own project-save/project-open commands), never invoked directly from JS, so — same finding as the main overlay app — it needs no explicit permission entry here; only core:* grants do.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

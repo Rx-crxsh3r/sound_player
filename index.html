@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clyr Studio</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="transport-bar">
+      <button id="open-audio-btn" type="button">Open Audio</button>
+      <input type="file" id="audio-file-input" accept="audio/*" hidden />
+      <span id="audio-filename" class="filename"></span>
+
+      <span class="sep"></span>
+
+      <button id="play-pause-btn" type="button" disabled>Play</button>
+      <input type="range" id="seek-bar" min="0" max="1000" value="0" step="1" disabled />
+      <span id="time-display">0:00 / 0:00</span>
+
+      <span class="sep"></span>
+
+      <button id="add-box-btn" type="button" disabled title="Captures the current playhead time as a new cue's start, and pauses playback">+ Add Box</button>
+
+      <span class="spacer"></span>
+
+      <button id="open-project-btn" type="button">Open Project</button>
+      <button id="save-project-btn" type="button">Save Project</button>
+      <span class="sep"></span>
+      <button id="import-clyr-btn" type="button">Import .clyr</button>
+      <input type="file" id="clyr-file-input" accept=".clyr,text/plain" hidden />
+      <button id="export-clyr-btn" type="button">Export .clyr</button>
+      <span class="sep"></span>
+      <button id="undo-btn" type="button" disabled>Undo</button>
+    </header>
+
+    <div id="main-area">
+      <aside id="layer-list-panel">
+        <h2>Cues</h2>
+        <div id="layer-list"></div>
+      </aside>
+
+      <div id="canvas-wrap">
+        <div id="canvas"></div>
+      </div>
+
+      <aside id="inspector-panel">
+        <!-- Shown when nothing is selected — edits the file-wide @
+             defaults new boxes inherit from. -->
+        <div id="defaults-form">
+          <h2>Project Defaults</h2>
+          <p class="hint">These become the file's <code>@</code> directives — the fallback style for any cue that doesn't override a property.</p>
+
+          <label>Font
+            <select id="def-font"></select>
+          </label>
+          <label>Size
+            <input type="text" id="def-size" placeholder="e.g. 32px" />
+          </label>
+          <label>Color
+            <input type="color" id="def-color" />
+          </label>
+          <label>Align
+            <select id="def-align">
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <div class="row">
+            <label><input type="checkbox" id="def-outline" /> Outline</label>
+            <input type="color" id="def-outline-color" />
+          </div>
+          <label><input type="checkbox" id="def-shadow" /> Shadow</label>
+        </div>
+
+        <!-- Shown when a cue is selected — edits that cue's sparse
+             overrides only. Blank fields simply aren't written. -->
+        <form id="inspector-form" hidden>
+          <h2>Cue</h2>
+
+          <label>Text
+            <input type="text" id="insp-text" maxlength="500" />
+          </label>
+
+          <div class="row">
+            <label>Start (s)
+              <input type="number" id="insp-start" step="0.01" min="0" />
+            </label>
+            <button type="button" id="insp-capture-start">Set to playhead</button>
+          </div>
+          <div class="row">
+            <label>End (s)
+              <input type="number" id="insp-end" step="0.01" min="0" />
+            </label>
+            <button type="button" id="insp-capture-end">Set to playhead</button>
+          </div>
+
+          <label>Font
+            <select id="insp-font"></select>
+          </label>
+          <label>Size
+            <input type="text" id="insp-size" placeholder="inherit" />
+          </label>
+          <div class="row">
+            <label><input type="checkbox" id="insp-color-override" /> Override color</label>
+            <input type="color" id="insp-color" />
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="insp-bold" /> Bold</label>
+            <label><input type="checkbox" id="insp-italic" /> Italic</label>
+          </div>
+          <label>Align
+            <select id="insp-align">
+              <option value="">(inherit)</option>
+              <option value="left">Left</option>
+              <option value="center">Center</option>
+              <option value="right">Right</option>
+            </select>
+          </label>
+          <div class="row">
+            <label>X %
+              <input type="number" id="insp-pos-x" min="0" max="100" step="0.1" />
+            </label>
+            <label>Y %
+              <input type="number" id="insp-pos-y" min="0" max="100" step="0.1" />
+            </label>
+          </div>
+          <div class="row">
+            <label><input type="checkbox" id="insp-outline" /> Outline</label>
+            <input type="color" id="insp-outline-color" />
+          </div>
+          <label><input type="checkbox" id="insp-shadow" /> Shadow</label>
+
+          <button type="button" id="insp-delete-btn" class="danger">Delete Cue</button>
+        </form>
+      </aside>
+    </div>
+
+    <footer id="status-bar">
+      <span id="status-message"></span>
+    </footer>
+  </div>
+
+  <audio id="audio-player"></audio>
+
+  <script src="js/clyr_format.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
