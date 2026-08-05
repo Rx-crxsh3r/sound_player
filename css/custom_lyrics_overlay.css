@@ -8,22 +8,30 @@ html, body {
   user-select: none;
 }
 
-/* Position (left/top) and typography (font/size/color/weight/style/align)
-   are all set inline per-cue from js/custom_lyrics_overlay.js — this file
-   only supplies the anchor/legibility mechanics that never vary per cue. */
-#cue {
+/* Position (left/top) and typography (font/size/color/weight/style/align/
+   outline) are all set inline per-cue from js/custom_lyrics_overlay.js —
+   this file only supplies the anchor mechanics that never vary per cue.
+   A fixed pool of these nodes lives inside #cue-pool (built once in JS)
+   so several cues with overlapping [start,end) windows can render at
+   once — see CUE_POOL_SIZE in the JS file. */
+.cue {
   position: fixed;
   transform: translate(-50%, -50%);
   max-width: 90vw;
   white-space: pre-wrap;
   line-height: 1.3;
-  /* Keeps text readable over an arbitrary game background regardless of
-     the cue's own color choice. */
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65), 0 0 2px rgba(0, 0, 0, 0.5);
   pointer-events: none;
   will-change: transform;
 }
 
-#cue.hidden {
+.cue.hidden {
   display: none;
+}
+
+/* Toggled per-cue via cue.style.shadow — defaults to true at parse time,
+   so a file that never mentions `shadow` keeps the legibility drop-shadow
+   this app always drew before the toggle existed. Fixed color/offsets,
+   not user-adjustable (only on/off is) — see CLYR_FORMAT.md. */
+.cue.shadow {
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65), 0 0 2px rgba(0, 0, 0, 0.5);
 }

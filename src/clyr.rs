@@ -56,15 +56,25 @@ pub(crate) struct CueStyle {
     pub(crate) align: String, // "left" | "center" | "right"
     pub(crate) pos_x: f32,    // percent of screen width, 0-100
     pub(crate) pos_y: f32,    // percent of screen height, 0-100
+    pub(crate) outline: bool,          // opt-in; fixed width, user-chosen color
+    pub(crate) outline_color: String,  // "#RRGGBB"/etc — meaningless when outline is false
+    pub(crate) shadow: bool,           // on/off only, fixed color — legibility aid, opt-out
 }
 
 impl CueStyle {
     // No `@pos` directive exists in the grammar (position isn't a
     // sensible whole-file default), so cues that omit `pos` fall back to
     // this builtin placement rather than an @-configurable one.
+    //
+    // shadow defaults to true (not false, unlike outline) — this preserves
+    // every existing .clyr file's current appearance: the renderer used to
+    // draw an unconditional drop-shadow, so a file that never mentions
+    // `shadow` should keep looking exactly like it did before this field
+    // existed. outline is new with no prior on-screen behavior, so it
+    // defaults off (opt-in).
     fn builtin_default() -> Self {
         CueStyle {
-            font: "Inter".to_string(),
+            font: "Segoe UI".to_string(),
             size: "32px".to_string(),
             color: "#FFFFFF".to_string(),
             bold: false,
@@ -72,6 +82,9 @@ impl CueStyle {
             align: "center".to_string(),
             pos_x: 50.0,
             pos_y: 85.0,
+            outline: false,
+            outline_color: "#000000".to_string(),
+            shadow: true,
         }
     }
 }
@@ -147,8 +160,14 @@ fn apply_directive(rest: &str, defaults: &mut CueStyle, line_no: usize) -> Resul
             validate_align(&v).map_err(|m| err(line_no, m))?;
             defaults.align = v;
         }
+        "outline" => defaults.outline = parse_bool(value, line_no)?,
+        "outlineColor" => {
+            validate_color(value).map_err(|m| err(line_no, m))?;
+            defaults.outline_color = value.to_string();
+        }
+        "shadow" => defaults.shadow = parse_bool(value, line_no)?,
         other => {
-            return Err(err(line_no, format!("unknown @directive '@{other}' (expected font/size/color/align)")));
+            return Err(err(line_no, format!("unknown @directive '@{other}' (expected font/size/color/align/outline/outlineColor/shadow)")));
         }
     }
     Ok(())
@@ -245,6 +264,13 @@ fn parse_style_block(block: &str, base: &CueStyle, line_no: usize) -> Result<(Cu
                 style.pos_x = x;
                 style.pos_y = y;
             }
+            "outline" => style.outline = parse_bool(value, line_no)?,
+            "outlineColor" => {
+                let v = strip_quotes(value);
+                validate_color(v).map_err(|m| err(line_no, m))?;
+                style.outline_color = v.to_string();
+            }
+            "shadow" => style.shadow = parse_bool(value, line_no)?,
             "fade" => {
                 let v: u32 = value
                     .parse()

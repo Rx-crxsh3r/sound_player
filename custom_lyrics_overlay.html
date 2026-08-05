@@ -7,13 +7,15 @@
   <link rel="stylesheet" href="css/custom_lyrics_overlay.css" />
 </head>
 <body>
-  <!-- Single reused node — v1 shows one active cue at a time (no
-       overlapping/concurrent cues, no fade/crossfade yet — both deferred).
-       Position/font/color/etc. are applied per-cue via individual
-       style.* property assignments in js/custom_lyrics_overlay.js; text
-       via textContent only. This window is permanently click-through and
-       has no interactive elements at all. -->
-  <div id="cue" class="hidden"></div>
+  <!-- Fixed pool of reusable .cue nodes (created once, in JS, at load —
+       see CUE_POOL_SIZE in js/custom_lyrics_overlay.js) so several cues
+       with overlapping [start,end) windows can render concurrently
+       without ever creating/destroying DOM nodes during playback.
+       Position/font/color/outline/shadow/etc. are applied per-cue via
+       individual style.* property assignments; text via textContent only.
+       This window is permanently click-through and has no interactive
+       elements at all. -->
+  <div id="cue-pool"></div>
   <script src="js/custom_lyrics_overlay.js"></script>
 </body>
 </html>
